@@ -1,0 +1,45 @@
+OptiScaler Auto Manager - Installation Guide
+============================================
+
+QUICK START:
+1. Install dependencies: sudo pacman -S python-requests p7zip
+2. Run: python3 optiscaler_manager.py
+3. Use Menu Option 7 to select FSR4 version
+4. Install OptiScaler to your games!
+
+REQUIREMENTS:
+- Arch Linux (or compatible)
+- Steam installed
+- Python 3.6+
+- python-requests package
+- p7zip package
+
+INSTALLATION:
+1. Extract this package to any location
+2. Install system dependencies:
+   sudo pacman -S python-requests p7zip steam
+
+3. Run the OptiScaler manager:
+   python3 optiscaler_manager.py
+
+USAGE:
+- Menu Option 1: List Steam games
+- Menu Option 2: Install OptiScaler (with interactive setup)
+- Menu Option 6: Get Steam launch commands with auto-apply
+- Menu Option 7: Manage FSR4 DLL versions (4.0 and 4.0.1 included)
+
+FEATURES:
+✓ Downloads latest OptiScaler nightly builds
+✓ Interactive installation with setup scripts
+✓ FSR4 DLL version management (4.0 and 4.0.1 included)
+✓ Automatic Steam launch options configuration
+✓ RDNA3 workaround support with DXIL_SPIRV_CONFIG
+✓ Complete uninstall with file restoration
+✓ Steam compatdata integration
+
+BUNDLED:
+- FSR 4.0 amdxcffx64.dll
+- FSR 4.0.1 amdxcffx64.dll
+- Complete OptiScaler management system
+
+For detailed documentation, see README.md
