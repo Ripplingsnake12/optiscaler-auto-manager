@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OptiScaler Manager
+Comment=Manage OptiScaler installations for Steam games
+GenericName=Game Enhancement Manager
+Icon=/home/marc/optiscaler-auto-manager/optiscaler-icon.svg
+Exec=/home/marc/optiscaler-auto-manager/launch-gui.sh
+Terminal=false
+StartupNotify=true
+Categories=Game;Utility;
+Keywords=optiscaler;fsr;dlss;steam;gaming;upscaling;
+Path=/home/marc/optiscaler-auto-manager

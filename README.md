@@ -1,122 +1,195 @@
-# OptiScaler Manager for Arch Linux
+# OptiScaler Auto Manager
 
-A comprehensive tool to manage OptiScaler installations on Steam games with FSR4 support.
+A comprehensive Python-based tool for automatically managing OptiScaler installations on Steam games in Linux. OptiScaler enables FSR4, DLSS, and other upscaling technologies on games that don't natively support them.
+
+![OptiScaler Manager](optiscaler-icon.svg)
 
 ## Features
 
-- **Automatic nightly build downloads** from OptiScaler GitHub
-- **Steam game detection** and selection
-- **Smart installation paths** for different game engines
-- **FSR4 DLL management** with automatic compatdata integration  
-- **Timestamped installations** with full tracking
-- **Complete uninstall** with file restoration
-- **Steam launch options** for FSR4/RDNA3 configurations
+- 🎮 **Steam Integration**: Automatically detects Steam games and installation paths
+- 🚀 **Auto Installation**: Downloads and installs the latest OptiScaler nightly builds
+- ⚙️ **Smart Configuration**: Automatically configures OptiScaler.ini with optimal settings
+- 🖥️ **Desktop Integration**: GUI launcher with application menu integration
+- 📊 **MangoHUD Support**: Optional performance monitoring overlay
+- 🔧 **Launch Options**: Automatically applies Steam launch options with proper VDF formatting
+- 🗂️ **FSR4 Management**: Manages multiple FSR4 DLL versions
+- 📦 **Backup System**: Creates backups before making changes
+- 🔄 **Uninstaller**: Clean removal of OptiScaler installations
 
-## Prerequisites
+## Quick Start
 
+### Option 1: GUI Launch (Recommended)
+1. Run `./install-desktop-entry.sh` to install desktop integration
+2. Launch from Applications menu: **Games > OptiScaler Manager**
+3. Or double-click `launch-gui.sh`
+
+### Option 2: Terminal Launch
 ```bash
-# Install required packages
-sudo pacman -S python-requests p7zip steam
-
-# Or alternatively for Python package
-pip install --user requests
+./run.sh
 ```
 
-## Setup
+## Installation
 
-### 1. FSR4 DLL Setup (Required for FSR4)
+### Prerequisites
+- **Linux Distribution**: Arch Linux, Bazzite, or compatible
+- **Steam**: Installed and configured
+- **Python 3**: With requests module
+- **p7zip**: For archive extraction
 
-Multiple FSR4 DLL versions are supported. Create the directory structure:
-
+### Automatic Setup
+The script automatically installs missing dependencies:
 ```bash
-./create_fsr4_structure.sh
+git clone <repository-url>
+cd optiscaler-auto-manager
+chmod +x run.sh
+./run.sh
 ```
 
-**Directory Structure:**
-```
-fsr4_dlls/
-├── FSR 4.0/
-│   └── amdxcffx64.dll
-└── FSR 4.0.1/
-    └── amdxcffx64.dll
-```
-
-**Getting amdxcffx64.dll versions:**
-- Copy from Windows: `C:\Windows\System32\amdxcffx64.dll`
-- Extract from Wine prefix system32 folder  
-- Download from AMD driver packages
-- Use bundled versions (if provided)
-
-**Version Selection:**
-- **Menu Option 7** - FSR4 DLL Management
-- **Automatic detection** of available versions
-- **Version switching** between installations
-- **Custom DLL browsing** for other versions
-
-### 2. Run OptiScaler Manager
-
+### Manual Dependency Installation
 ```bash
-python3 optiscaler_manager.py
+# Arch Linux / Bazzite
+sudo pacman -S python-requests p7zip
+
+# Ubuntu / Debian
+sudo apt install python3-requests p7zip-full
+
+# Fedora
+sudo dnf install python3-requests p7zip
 ```
 
-## Usage
+## Usage Guide
 
-### Installation Process
+### 1. Install OptiScaler on a Game
+1. Launch OptiScaler Manager
+2. Select **"2. Install OptiScaler"**
+3. Choose your game from the Steam library
+4. Select installation location (usually "Main Game Directory")
+5. The tool will:
+   - Download latest OptiScaler nightly
+   - Extract to game directory
+   - Run setup scripts
+   - Configure OptiScaler.ini
+   - Copy FSR4 DLL to compatibility data
 
-1. **List Steam Games** - View all detected Steam games
-2. **Install OptiScaler** - Select game and installation path
-3. **Auto-configure** - Sets `Fsr4Update=true` in OptiScaler.ini
-4. **FSR4 DLL Copy** - Automatically copies to game's compatdata system32 folder
+### 2. Configure Steam Launch Options
+1. Select **"6. Add Steam launch options"**
+2. Choose your game
+3. Select if you need RDNA3 workarounds
+4. Choose to include MangoHUD (performance monitoring)
+5. Pick launch option type:
+   - **Basic**: Essential OptiScaler setup
+   - **Advanced**: Additional performance optimizations
+   - **Debug**: Detailed logging for troubleshooting
+   - **Anti-Lag 2**: Experimental latency reduction
 
-### Steam Launch Options
+### 3. Manage FSR4 DLL Versions
+1. Select **"7. Manage FSR4 DLL"**
+2. Choose from bundled FSR4 versions or browse for custom DLL
+3. The selected version will be used for all future installations
 
-The tool provides comprehensive launch commands:
+### 4. View and Uninstall
+- **View installations**: Option 3 shows all current OptiScaler installations
+- **Uninstall**: Option 4 cleanly removes OptiScaler and restores original files
 
-**OptiScaler Basic (REQUIRED):**
-- Standard: `WINEDLLOVERRIDES="dxgi=n,b" PROTON_FSR4_UPGRADE=1 %command%`
-- RDNA3: `WINEDLLOVERRIDES="dxgi=n,b" DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc %command%`
+## Launch Command Examples
 
-**Advanced Performance:**
-- Full: `WINEDLLOVERRIDES="dxgi=n,b" PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 %command%`
+### Basic OptiScaler
+```bash
+WINEDLLOVERRIDES="dxgi=n,b" PROTON_FSR4_UPGRADE=1 %command%
+```
 
-**Game-Specific:**
-- Unreal Engine: Add `-dx12` flag  
-- DLSS FG Issues: `WINEDLLOVERRIDES="dxgi=n,b;nvngx=n,b"`
-- Debugging: `PROTON_LOG=+all WINEDEBUG=+dll`
-- Anti-Lag 2: `RADV_PERFTEST=rt,nggc`
+### With MangoHUD Performance Monitoring
+```bash
+mangohud WINEDLLOVERRIDES="dxgi=n,b" PROTON_FSR4_UPGRADE=1 %command%
+```
 
-**⚠️ CRITICAL:** `WINEDLLOVERRIDES="dxgi=n,b"` is **REQUIRED** for OptiScaler to function!
+### RDNA3 GPU Workaround
+```bash
+WINEDLLOVERRIDES="dxgi=n,b" DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc %command%
+```
 
-### Automatic Launch Options
+### Advanced with Performance Optimizations
+```bash
+WINEDLLOVERRIDES="dxgi=n,b" PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 %command%
+```
 
-The tool can automatically apply launch options to Steam:
-1. **Select preferred option** (Basic, Advanced, Debug, Anti-Lag 2)
-2. **Automatic Steam config modification** - Updates `localconfig.vdf`
-3. **Steam restart** - Option to restart Steam automatically
-4. **Backup creation** - Original config backed up before changes
+## File Structure
 
-**RDNA3 Special:** Automatically includes `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` for proper RDNA3 support.
+```
+optiscaler-auto-manager/
+├── optiscaler_manager.py          # Main application
+├── run.sh                         # Terminal launcher with dependency check
+├── launch-gui.sh                  # GUI launcher for desktop integration
+├── install-desktop-entry.sh       # Desktop integration installer
+├── optiscaler-manager.desktop     # Desktop entry file
+├── create-icon.py                 # Icon generator
+├── optiscaler-icon.svg           # Application icon
+├── test_steam_fix.py             # Steam VDF testing utility
+├── test_hunt.py                  # Hunt: Showdown testing utility
+└── README.md                     # This file
+```
 
-### Game Engine Support
+## Configuration Files
 
-**Unreal Engine Games:**
-- `Game/Binaries/Win64/`
-- `Content/Engine/Plugins/Runtime/Nvidia/DLSS/Binaries/ThirdParty/Win64/`
+### User Configuration
+- **Installations**: `~/.config/optiscaler_manager/installations.json`
+- **FSR4 DLL**: `~/.config/optiscaler_manager/amdxcffx64.dll`
+- **Desktop Entry**: `~/.local/share/applications/optiscaler-manager.desktop`
 
-**Other Engines:**
-- Main executable directory
-- Auto-detected based on file patterns
+### Steam Integration
+- **Config Path**: `~/.steam/steam/userdata/[USER_ID]/config/localconfig.vdf`
+- **Backups**: Automatic backups created before modifications
 
-### Compatdata Integration
+## Supported Games
 
-For each installation, the tool:
-1. Copies `amdxcffx64.dll` to: `~/.steam/steam/steamapps/compatdata/{APP_ID}/pfx/drive_c/windows/system32/`
-2. Tracks the copy for proper uninstall
-3. Removes during uninstall process
+OptiScaler works with most DirectX 11/12 games. Tested and verified with:
+- Hunt: Showdown
+- Stellar Blade
+- Cyberpunk 2077
+- Elden Ring
+- And many more...
 
-## Configuration
+## GPU Compatibility
 
-**OptiScaler.ini Settings Applied:**
+### AMD GPUs
+- **RDNA3** (RX 7000 series): Use RDNA3 workaround options
+- **RDNA2** (RX 6000 series): Standard options work
+- **RDNA1** (RX 5000 series): Basic OptiScaler support
+
+### NVIDIA GPUs
+- **RTX 40 series**: Full DLSS/FSR support
+- **RTX 30/20 series**: DLSS + FSR support
+- **GTX series**: FSR support only
+
+### Intel GPUs
+- **Arc GPUs**: Basic FSR support
+
+## Troubleshooting
+
+### OptiScaler Overlay Not Appearing
+1. Try the "Disable DLSS FG" launch option variant
+2. Ensure `WINEDLLOVERRIDES="dxgi=n,b"` is present
+3. Check game logs for DLL loading errors
+
+### Steam Launch Options Not Applying
+1. Restart Steam completely after applying options
+2. Check Steam game properties to verify options are visible
+3. Restore from backup if VDF corruption occurs
+
+### Performance Issues
+1. Enable MangoHUD to monitor performance
+2. Try different OptiScaler presets (Performance vs Quality)
+3. Use DXVK_ASYNC=1 for better frame pacing
+
+### FSR4 Not Working
+1. Verify amdxcffx64.dll is in compatdata/[APPID]/pfx/drive_c/windows/system32/
+2. Check OptiScaler.ini has `Fsr4Update=true`
+3. Ensure game supports FSR4 requirements
+
+## Advanced Configuration
+
+### Custom OptiScaler.ini Settings
+Edit the generated OptiScaler.ini in your game directory:
 ```ini
 [OptiScaler]
 Fsr4Update=true
@@ -126,93 +199,46 @@ MotionVectorResourceBarrier=auto
 OverrideNvapiDll=auto
 ```
 
-## Installation Tracking
+### Custom Launch Options
+You can manually add these environment variables:
+- `DXVK_ASYNC=1` - Async shader compilation
+- `PROTON_ENABLE_NVAPI=1` - Enable NVIDIA API
+- `VKD3D_CONFIG=dxr11,dxr` - DirectX Raytracing support
+- `WINE_CPU_TOPOLOGY=4:2` - CPU topology override
 
-All installations are tracked in `~/.config/optiscaler_manager/installations.json` with:
-- Game information and app ID
-- Installation path and timestamp  
-- Backup file locations
-- FSR4 DLL copy status
+## Development
 
-## Uninstall Process
-
-Complete restoration includes:
-1. **Run interactive removal script** - Opens `remove_optiscaler.sh` in terminal window
-2. **User confirms removal options** - Interactive menu for selective removal
-3. **Manual cleanup** - Remove any remaining OptiScaler files
-4. **Restore original files** - Restore backed-up game DLLs
-5. **Remove FSR4 DLL** - Clean compatdata system32 folder
-6. **Clean installation tracking** - Remove from installations.json
-
-### Interactive Removal Scripts Supported:
-- `remove_optiscaler.sh` (primary)
-- `uninstall_optiscaler.sh`
-- `remove.sh`
-- `uninstall.sh`
-
-## Menu Options
-
-1. **List Steam games** - Show all detected games
-2. **Install OptiScaler** - Full installation process
-3. **View installations** - Show current installs
-4. **Uninstall OptiScaler** - Complete removal
-5. **Download latest nightly** - Get newest build
-6. **Add Steam launch options** - Display launch commands
-7. **Manage FSR4 DLL** - Select FSR4 version and manage DLLs
-8. **Exit**
-
-### FSR4 DLL Version Management
-
-**Available Options:**
-- **View current version** - Shows active FSR4 DLL and detected version
-- **Change version** - Select from available FSR 4.0/4.0.1 versions
-- **Browse custom** - Use DLL from custom location
-- **Version detection** - Automatic identification of current version
-
-**Supported Versions:**
-- **FSR 4.0** - Original FSR4 release
-- **FSR 4.0.1** - Updated FSR4 with improvements
-- **Custom versions** - Any compatible amdxcffx64.dll
-
-## Troubleshooting
-
-**FSR4 DLL not found:**
-- Run `./setup_fsr4.sh`
-- Use menu option 7 to check status
-- Manually place in `~/.config/optiscaler_manager/`
-
-**Steam games not detected:**
-- Check Steam installation paths
-- Verify manifest files exist
-
-**Installation fails:**
-- Check game executable paths
-- Ensure write permissions
-- Verify OptiScaler download
-
-## File Structure
-
-```
-.
-├── optiscaler_manager.py      # Main application
-├── setup_fsr4.sh            # FSR4 DLL setup
-├── create_fsr4_structure.sh  # Create FSR4 directories
-├── README.md                 # This file
-├── fsr4_dlls/               # Bundled FSR4 versions
-│   ├── FSR 4.0/
-│   │   └── amdxcffx64.dll
-│   └── FSR 4.0.1/
-│       └── amdxcffx64.dll
-└── ~/.config/optiscaler_manager/
-    ├── installations.json    # Installation tracking
-    ├── amdxcffx64.dll       # Selected FSR4 DLL
-    └── *.7z                 # Downloaded builds
+### Testing Steam VDF Integration
+```bash
+python3 test_steam_fix.py    # Test VDF parsing
+python3 test_hunt.py         # Test with specific game
 ```
 
-## Notes
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Test with multiple games and GPU types
+4. Submit pull request
 
-- Only works with Steam games on Linux
-- Requires FSR4 compatible GPU (RDNA4) for FSR4 features  
-- RDNA3 cards need workarounds for FSR4
-- Backs up original files before installation
-- Timestamps all operations for tracking
+## License
+
+This project is open source. OptiScaler itself is developed by the OptiScaler team.
+
+## Acknowledgments
+
+- **OptiScaler Team**: For the amazing upscaling technology
+- **Valve**: For Steam and Proton
+- **AMD**: For FSR technology
+- **Community**: For testing and feedback
+
+## Support
+
+For issues and support:
+1. Check the troubleshooting section above
+2. Enable debug launch options for detailed logs
+3. Create an issue with system information and logs
+4. Join the OptiScaler community forums
+
+---
+
+**Enjoy enhanced gaming with OptiScaler! 🎮✨**

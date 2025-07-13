@@ -36,10 +36,16 @@ class OptiScalerManager:
             Path.home() / ".steam" / "steam",
             Path.home() / ".local" / "share" / "Steam",
             Path("/usr/share/steam"),
+            Path.home() / ".steam" / "root",
+            Path.home() / "snap" / "steam" / "common" / ".steam" / "steam",
+            Path("/var/lib/flatpak/app/com.valvesoftware.Steam/home/.steam/steam"),
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / "home" / ".steam" / "steam",
         ]
         for path in steam_paths:
             if path.exists():
+                print(f"Found Steam at: {path}")
                 return path
+        print("Steam installation not found in standard locations")
         return None
 
     def _find_fsr4_dll(self) -> Optional[Path]:
@@ -226,24 +232,66 @@ class OptiScalerManager:
         
         return sorted(games, key=lambda x: x["name"])
 
-    def find_game_executable_paths(self, game_path: str) -> List[str]:
+    def find_game_executable_paths(self, game_path: str) -> List[Dict[str, str]]:
+        """Find all possible executable locations with details about what's in each folder"""
         game_dir = Path(game_path)
-        exe_paths = []
+        exe_locations = []
         
-        common_exe_patterns = [
-            "*.exe",
-            "**/Binaries/Win64/*.exe",
-            "**/Game/Binaries/Win64/*.exe",
-            "**/Content/Engine/Plugins/Runtime/Nvidia/DLSS/Binaries/ThirdParty/Win64",
-            "**/*_shipping.exe"
-        ]
+        # Find all executable files and analyze them
+        for exe_file in game_dir.rglob("*.exe"):
+            if not exe_file.is_file():
+                continue
+                
+            # Skip obvious non-game executables
+            skip_paths = ["engine", "redist", "directx", "vcredist", "_commonredist", "tools", "crash"]
+            skip_names = ["unins", "setup", "launcher", "redist", "vcredist", "directx", "crash"]
+            
+            path_str = str(exe_file.parent).lower()
+            name_str = exe_file.name.lower()
+            
+            # Skip if in excluded paths or has excluded names
+            if (any(skip in path_str for skip in skip_paths) or 
+                any(skip in name_str for skip in skip_names)):
+                continue
+            
+            # Determine the type/priority of this executable
+            exe_type = "Other"
+            priority = 3
+            
+            if exe_file.parent == game_dir:
+                exe_type = "Main Game Directory"
+                priority = 1
+            elif "_shipping" in name_str:
+                exe_type = "Shipping Executable (UE)"
+                priority = 1
+            elif any(folder in str(exe_file.parent).lower() for folder in ["bin/x64", "retail", "binaries/win64"]):
+                exe_type = "Common Game Folder"
+                priority = 2
+            elif "ue4" in name_str or "ue5" in name_str:
+                continue  # Skip UE engine executables
+            
+            # Create location info
+            location_info = {
+                "path": str(exe_file.parent),
+                "exe_name": exe_file.name,
+                "type": exe_type,
+                "priority": priority,
+                "relative_path": str(exe_file.parent.relative_to(game_dir))
+            }
+            
+            # Check if we already have this path
+            existing = next((loc for loc in exe_locations if loc["path"] == location_info["path"]), None)
+            if existing:
+                # If we find a better executable in the same folder, update it
+                if priority < existing["priority"]:
+                    existing.update(location_info)
+            else:
+                exe_locations.append(location_info)
         
-        for pattern in common_exe_patterns:
-            for exe_file in game_dir.glob(pattern):
-                if exe_file.is_file() and not exe_file.name.startswith("UE"):
-                    exe_paths.append(str(exe_file.parent))
+        # Sort by priority (lower number = higher priority) then by path depth
+        exe_locations.sort(key=lambda x: (x["priority"], len(Path(x["path"]).parts), x["path"]))
         
-        return list(set(exe_paths))
+        return exe_locations
 
     def get_compatdata_path(self, app_id: str) -> Optional[Path]:
         if not self.steam_path:
@@ -368,30 +416,40 @@ class OptiScalerManager:
         
         return backup_map
 
-    def install_optiscaler(self, game_info: Dict, exe_path: str, zip_path: str) -> bool:
-        target_dir = Path(exe_path)
+    def install_optiscaler(self, game_info: Dict, exe_location: Dict, zip_path: str) -> bool:
+        target_dir = Path(exe_location["path"])
+        
+        print(f"Installing OptiScaler to: {target_dir}")
+        print(f"Target executable: {exe_location['exe_name']}")
+        print(f"Location type: {exe_location['type']}")
         
         backup_map = self.backup_original_files(str(target_dir))
         
         if not self.extract_optiscaler(zip_path, str(target_dir)):
             return False
         
+        # Try to run Windows batch setup first if available
         setup_bat = target_dir / "OptiScaler Setup.bat"
         if setup_bat.exists():
             try:
                 subprocess.run(["wine", str(setup_bat)], cwd=str(target_dir), check=True)
+                print("Windows setup completed successfully")
             except subprocess.CalledProcessError:
-                print("Auto-setup failed, manual configuration may be needed")
+                print("Windows auto-setup failed, proceeding with Linux setup")
         
+        # Run Linux setup script in the correct directory
         self.run_optiscaler_setup(str(target_dir))
         
+        # Configure INI file
         self.configure_optiscaler_ini(str(target_dir))
         
+        # Copy FSR4 DLL to compatdata
         fsr4_dll_copied = self.copy_fsr4_dll_to_compatdata(game_info["app_id"])
         
         install_info = {
             "game": game_info,
             "install_path": str(target_dir),
+            "exe_location": exe_location,
             "timestamp": datetime.now().isoformat(),
             "backup_files": backup_map,
             "zip_source": zip_path,
@@ -404,10 +462,10 @@ class OptiScalerManager:
     def run_optiscaler_setup(self, install_dir: str):
         install_path = Path(install_dir)
         
-        # Look for setup scripts
+        # Look for setup scripts (prioritize setup_linux.sh as it's the official name)
         setup_scripts = [
             install_path / "setup_linux.sh",
-            install_path / "OptiScaler Setup.sh",
+            install_path / "OptiScaler Setup.sh", 
             install_path / "setup.sh"
         ]
         
@@ -420,6 +478,8 @@ class OptiScalerManager:
                     
                     print("Opening interactive setup window...")
                     print("Please configure your OptiScaler settings in the terminal window that opens.")
+                    
+                    print(f"Running setup script in directory: {install_path}")
                     
                     # Try different terminal emulators in order of preference
                     terminals = [
@@ -559,10 +619,19 @@ OverrideNvapiDll=auto
         
         # Then manually clean up any remaining files
         optiscaler_files = [
-            "OptiScaler.dll", "OptiScaler.ini", "OptiScaler Setup.bat",
+            "OptiScaler.dll", "OptiScaler.ini", "OptiScaler.log", "OptiScaler Setup.bat",
+            "setup_linux.sh", "setup_windows.bat", "remove_optiscaler.sh",
+            # Possible renamed OptiScaler DLL files
+            "dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", 
+            "d3d12.dll", "wininet.dll", "winhttp.dll", "OptiScaler.asi",
+            # Other DLSS/FSR files that might get installed
             "nvngx.dll", "libxess.dll", "amd_fidelityfx_fsr2.dll",
-            "amd_fidelityfx_fsr3.dll", "ffx_fsr2_api_x64.dll",
-            "setup_linux.sh", "remove_optiscaler.sh"
+            "amd_fidelityfx_fsr3.dll", "ffx_fsr2_api_x64.dll"
+        ]
+        
+        # Also remove directories created by OptiScaler
+        optiscaler_dirs = [
+            "D3D12_Optiscaler", "DlssOverrides", "Licenses"
         ]
         
         print("Cleaning up remaining OptiScaler files...")
@@ -571,6 +640,14 @@ OverrideNvapiDll=auto
             if file_path.exists():
                 file_path.unlink()
                 print(f"Removed: {filename}")
+        
+        # Remove OptiScaler directories
+        for dirname in optiscaler_dirs:
+            dir_path = install_path / dirname
+            if dir_path.exists() and dir_path.is_dir():
+                import shutil
+                shutil.rmtree(dir_path)
+                print(f"Removed directory: {dirname}")
         
         # Restore original backed up files
         print("Restoring original game files...")
@@ -591,10 +668,10 @@ OverrideNvapiDll=auto
     def run_optiscaler_removal_script(self, install_dir: str):
         install_path = Path(install_dir)
         
-        # Look for removal scripts
+        # Look for removal scripts (prioritize remove_optiscaler.sh as it's created by setup_linux.sh)
         removal_scripts = [
             install_path / "remove_optiscaler.sh",
-            install_path / "uninstall_optiscaler.sh",
+            install_path / "uninstall_optiscaler.sh", 
             install_path / "remove.sh",
             install_path / "uninstall.sh"
         ]
@@ -608,6 +685,8 @@ OverrideNvapiDll=auto
                     
                     print("Opening interactive removal window...")
                     print("Please confirm removal options in the terminal window that opens.")
+                    
+                    print(f"Running removal script in directory: {install_path}")
                     
                     # Try different terminal emulators in order of preference
                     terminals = [
@@ -692,9 +771,11 @@ OverrideNvapiDll=auto
             basic_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 %command%'
         
         print(f"Basic: {basic_cmd}")
+        print(f"With MangoHUD: mangohud {basic_cmd}")
         
         print("\n=== OptiScaler Advanced Options ===")
         print("For better performance and compatibility:")
+        print("Note: The setup_linux.sh script may have specified additional DLL overrides")
         
         advanced_options = [
             "DXVK_ASYNC=1",
@@ -710,6 +791,7 @@ OverrideNvapiDll=auto
             full_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 {" ".join(advanced_options)} %command%'
         
         print(f"Advanced: {full_cmd}")
+        print(f"Advanced + MangoHUD: mangohud {full_cmd}")
         
         print("\n=== OptiScaler Debugging ===")
         if rdna3_workaround:
@@ -717,6 +799,7 @@ OverrideNvapiDll=auto
         else:
             debug_cmd = f'{optiscaler_base} PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 %command%'
         print(f"Debug mode: {debug_cmd}")
+        print(f"Debug + MangoHUD: mangohud {debug_cmd}")
         
         print("\n=== Anti-Lag 2 (Experimental) ===")
         if rdna3_workaround:
@@ -724,6 +807,7 @@ OverrideNvapiDll=auto
         else:
             antilag_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt %command%'
         print(f"With Anti-Lag 2: {antilag_cmd}")
+        print(f"Anti-Lag 2 + MangoHUD: mangohud {antilag_cmd}")
         
         print("\n=== Game-Specific Tweaks ===")
         print("For Unreal Engine games:")
@@ -744,6 +828,10 @@ OverrideNvapiDll=auto
         apply_choice = input("Would you like to automatically apply launch options to Steam? (y/n): ").lower()
         
         if apply_choice == 'y':
+            # Ask about MangoHUD
+            mangohud_choice = input("Include MangoHUD for performance monitoring? (y/n): ").lower()
+            mangohud_prefix = "mangohud " if mangohud_choice == 'y' else ""
+            
             if rdna3_workaround:
                 option_choice = input("\nWhich RDNA3 option to apply?\n1. Basic RDNA3 (with DXIL_SPIRV_CONFIG)\n2. Advanced RDNA3\n3. Debug RDNA3\n4. Anti-Lag 2 RDNA3\nEnter choice (1-4): ").strip()
             else:
@@ -757,11 +845,42 @@ OverrideNvapiDll=auto
             elif option_choice == "4":
                 selected_cmd = antilag_cmd
             
+            # Add mangohud prefix if requested
+            if mangohud_prefix:
+                selected_cmd = mangohud_prefix + selected_cmd
+            
             if self.apply_steam_launch_options(app_id, selected_cmd):
                 print("✓ Launch options applied successfully!")
                 print("You can now launch the game directly from Steam.")
             else:
-                print("⚠ Automatic application failed. Please apply manually:")
+                print("⚠ Automatic application failed. Trying to copy to clipboard...")
+                try:
+                    import subprocess
+                    # Try to copy to clipboard using xclip or xsel
+                    clipboard_commands = [
+                        ['xclip', '-selection', 'clipboard'],
+                        ['xsel', '--clipboard', '--input'],
+                        ['wl-copy']  # Wayland
+                    ]
+                    
+                    copied = False
+                    for cmd in clipboard_commands:
+                        try:
+                            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                            proc.communicate(input=selected_cmd.encode())
+                            if proc.returncode == 0:
+                                print(f"✓ Launch command copied to clipboard using {cmd[0]}!")
+                                copied = True
+                                break
+                        except FileNotFoundError:
+                            continue
+                    
+                    if not copied:
+                        print("❌ Could not copy to clipboard (xclip/xsel/wl-copy not found)")
+                except Exception as e:
+                    print(f"❌ Clipboard copy failed: {e}")
+                
+                print("Please apply manually:")
                 print(f"Launch command: {selected_cmd}")
         else:
             print("\nTo apply manually:")
@@ -773,87 +892,198 @@ OverrideNvapiDll=auto
     def apply_steam_launch_options(self, app_id: str, launch_command: str) -> bool:
         try:
             if not self.steam_path:
-                print("Steam path not found")
+                print("❌ Steam path not found. Please ensure Steam is installed.")
                 return False
+            
+            print(f"🔍 Using Steam path: {self.steam_path}")
             
             # Find Steam user directories
             userdata_path = self.steam_path / "userdata"
             if not userdata_path.exists():
-                print("Steam userdata directory not found")
+                print(f"❌ Steam userdata directory not found at: {userdata_path}")
                 return False
+            
+            print(f"✓ Found userdata directory: {userdata_path}")
             
             # Look for Steam user ID directories
             user_dirs = [d for d in userdata_path.iterdir() if d.is_dir() and d.name.isdigit()]
             
             if not user_dirs:
-                print("No Steam user directories found")
+                print("❌ No Steam user directories found")
+                available_dirs = list(userdata_path.iterdir())
+                print(f"Available directories in userdata: {[d.name for d in available_dirs]}")
                 return False
+            
+            print(f"✓ Found {len(user_dirs)} user directory(ies)")
             
             # Use the first (or most recent) user directory
             user_dir = max(user_dirs, key=lambda x: x.stat().st_mtime)
+            print(f"🔍 Using user directory: {user_dir}")
             
             # Path to localconfig.vdf
             localconfig_path = user_dir / "config" / "localconfig.vdf"
             
             if not localconfig_path.exists():
-                print("Steam localconfig.vdf not found")
+                print(f"❌ Steam localconfig.vdf not found at: {localconfig_path}")
+                config_dir = user_dir / "config"
+                if config_dir.exists():
+                    available_files = list(config_dir.iterdir())
+                    print(f"Available files in config: {[f.name for f in available_files]}")
                 return False
+            
+            print(f"✓ Found localconfig.vdf: {localconfig_path}")
+            
+            # Check if Steam is running (warn user but continue)
+            import subprocess
+            try:
+                result = subprocess.run(['pgrep', '-f', 'steam'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    print("⚠️ Warning: Steam appears to be running. Consider closing Steam first.")
+                    print("   Steam may overwrite the changes when it exits.")
+            except:
+                pass  # pgrep not available or other error, continue anyway
             
             # Read the current config
-            with open(localconfig_path, 'r', encoding='utf-8', errors='ignore') as f:
-                config_content = f.read()
+            try:
+                with open(localconfig_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    config_content = f.read()
+            except PermissionError:
+                print(f"❌ Permission denied reading {localconfig_path}")
+                print("   Try running with sudo or change file permissions")
+                return False
+            except Exception as e:
+                print(f"❌ Error reading config file: {e}")
+                return False
             
-            # Look for the app's launch options section
-            app_section_start = config_content.find(f'"{app_id}"')
+            print(f"✓ Config file read successfully ({len(config_content)} characters)")
+            
+            # Look for the apps section first, then the specific app ID
+            apps_section_start = config_content.find('"apps"')
+            if apps_section_start == -1:
+                print("❌ apps section not found in Steam config")
+                print("   This may not be a valid Steam localconfig.vdf file")
+                return False
+            
+            # Search for the app ID within the apps section
+            app_section_start = config_content.find(f'"{app_id}"', apps_section_start)
             if app_section_start == -1:
-                print(f"Game with App ID {app_id} not found in Steam config")
+                print(f"❌ Game with App ID {app_id} not found in Steam config")
+                print("   Make sure the game is in your Steam library and has been launched at least once")
                 return False
             
-            # Find the LaunchOptions within this app section
-            section_start = config_content.rfind('{', 0, app_section_start)
-            section_end = config_content.find('}', app_section_start)
+            print(f"✓ Found game with App ID {app_id} in apps section")
             
-            if section_start == -1 or section_end == -1:
-                print("Could not locate app section in Steam config")
+            # Find the opening brace after the app ID
+            brace_start = config_content.find('{', app_section_start)
+            if brace_start == -1:
+                print("Could not find opening brace for app section")
                 return False
             
-            app_section = config_content[section_start:section_end + 1]
+            # Find the matching closing brace by counting braces
+            brace_count = 0
+            brace_end = -1
+            for i in range(brace_start, len(config_content)):
+                if config_content[i] == '{':
+                    brace_count += 1
+                elif config_content[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        brace_end = i
+                        break
+            
+            if brace_end == -1:
+                print("Could not find closing brace for app section")
+                return False
+            
+            # Extract the app section content (between braces)
+            app_section_start_pos = brace_start + 1
+            app_section_content = config_content[app_section_start_pos:brace_end]
+            print(f"🔍 App section content preview (first 300 chars):")
+            print(repr(app_section_content[:300]))
+            
+            # Debug: Check if this section already has the expected structure
+            if '"LaunchOptions"' in app_section_content:
+                print("✓ LaunchOptions field already exists in this section")
+            else:
+                print("ℹ LaunchOptions field not found, will add new one")
             
             # Check if LaunchOptions already exists
             launch_options_pattern = r'"LaunchOptions"\s*"([^"]*)"'
             
             import re
-            match = re.search(launch_options_pattern, app_section)
+            match = re.search(launch_options_pattern, app_section_content)
+            
+            # Escape quotes in the launch command for VDF format
+            escaped_command = launch_command.replace('"', '\\"')
             
             if match:
                 # Replace existing launch options
                 old_options = match.group(1)
-                new_section = app_section.replace(f'"LaunchOptions"\t\t"{old_options}"', f'"LaunchOptions"\t\t"{launch_command}"')
-                print(f"Replaced existing launch options: '{old_options}' -> '{launch_command}'")
+                new_app_content = re.sub(launch_options_pattern, f'"LaunchOptions"\t\t"{escaped_command}"', app_section_content)
+                print(f"✓ Replaced existing launch options: '{old_options}' -> '{launch_command}'")
             else:
-                # Add new launch options before the closing brace
-                insert_pos = app_section.rfind('}')
-                new_section = app_section[:insert_pos] + f'\t\t\t"LaunchOptions"\t\t"{launch_command}"\n' + app_section[insert_pos:]
-                print(f"Added new launch options: '{launch_command}'")
+                # Add new launch options at the end
+                # Use the exact Steam VDF indentation (6 tabs for app properties)
+                indent = '\t\t\t\t\t\t'  # Steam uses exactly 6 tabs for app properties
+                
+                new_app_content = app_section_content.rstrip() + f'\n{indent}"LaunchOptions"\t\t"{escaped_command}"'
+                print(f"✓ Added new launch options: '{launch_command}'")
             
-            # Replace the section in the full config
-            new_config = config_content[:section_start] + new_section + config_content[section_end + 1:]
+            # Replace the app section content in the full config
+            new_config = config_content[:app_section_start_pos] + new_app_content + config_content[brace_end:]
             
             # Backup the original file
             backup_path = localconfig_path.with_suffix('.vdf.optiscaler_backup')
-            shutil.copy2(localconfig_path, backup_path)
-            print(f"Backed up original config to: {backup_path}")
+            try:
+                shutil.copy2(localconfig_path, backup_path)
+                print(f"✓ Backed up original config to: {backup_path}")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not create backup: {e}")
+                print("   Continuing anyway...")
             
             # Write the new config
-            with open(localconfig_path, 'w', encoding='utf-8') as f:
-                f.write(new_config)
+            try:
+                with open(localconfig_path, 'w', encoding='utf-8') as f:
+                    f.write(new_config)
+                print("✅ Steam configuration updated successfully!")
+                
+                # Verify the changes were written correctly
+                with open(localconfig_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    verification_content = f.read()
+                
+                if f'"{app_id}"' in verification_content and escaped_command in verification_content:
+                    print("✅ Verification: Launch options successfully written to config")
+                else:
+                    print("⚠️ Warning: Could not verify launch options in updated config")
+                    print("   The changes may not have been applied correctly")
+                    # Debug: show what was actually written
+                    app_pos = verification_content.find(f'"{app_id}"')
+                    if app_pos != -1:
+                        debug_section = verification_content[app_pos:app_pos+500]
+                        print(f"   Debug - App section: {repr(debug_section)}")
+                
+                print("   You can now launch the game directly from Steam.")
+            except PermissionError:
+                print(f"❌ Permission denied writing to {localconfig_path}")
+                print("   Try running with sudo or change file permissions")
+                return False
+            except Exception as e:
+                print(f"❌ Error writing config file: {e}")
+                return False
+            print("\n" + "="*60)
+            print("✅ LAUNCH OPTIONS APPLIED SUCCESSFULLY!")
+            print("="*60)
+            print("⚠️  IMPORTANT: Steam must be restarted for changes to take effect.")
+            print("   - Close Steam completely (including Steam client)")
+            print("   - Restart Steam")
+            print("   - Check game properties to verify launch options are visible")
+            print("="*60)
             
-            print("Steam configuration updated successfully!")
-            print("Note: Steam must be restarted for changes to take effect.")
-            
-            restart_choice = input("Would you like to restart Steam now? (y/n): ").lower()
+            restart_choice = input("\nWould you like to restart Steam automatically? (y/n): ").lower()
             if restart_choice == 'y':
                 self.restart_steam()
+            else:
+                print("Please manually restart Steam to apply the launch options.")
             
             return True
             
@@ -863,20 +1093,52 @@ OverrideNvapiDll=auto
     
     def restart_steam(self):
         try:
-            print("Stopping Steam...")
-            subprocess.run(["pkill", "steam"], check=False)
-            subprocess.run(["pkill", "Steam"], check=False)
+            print("🔄 Stopping Steam...")
+            # More thorough Steam stopping
+            subprocess.run(["pkill", "-f", "steam"], check=False)
+            subprocess.run(["pkill", "-f", "Steam"], check=False)
+            subprocess.run(["killall", "steam"], check=False, stderr=subprocess.DEVNULL)
+            subprocess.run(["killall", "Steam"], check=False, stderr=subprocess.DEVNULL)
             
-            # Wait a moment
+            # Wait for Steam to fully close
             import time
-            time.sleep(2)
+            print("⏳ Waiting for Steam to close completely...")
+            time.sleep(5)
             
-            print("Starting Steam...")
-            subprocess.Popen(["steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("Steam is restarting...")
+            # Verify Steam is closed
+            result = subprocess.run(['pgrep', '-f', 'steam'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("⚠️  Steam processes still running. Waiting longer...")
+                time.sleep(3)
+            
+            print("🚀 Starting Steam...")
+            # Try multiple ways to start Steam
+            start_commands = [
+                ["steam"],
+                ["/usr/bin/steam"],
+                ["flatpak", "run", "com.valvesoftware.Steam"],
+                ["snap", "run", "steam"]
+            ]
+            
+            steam_started = False
+            for cmd in start_commands:
+                try:
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    steam_started = True
+                    print(f"✅ Steam started using: {' '.join(cmd)}")
+                    break
+                except FileNotFoundError:
+                    continue
+            
+            if not steam_started:
+                print("❌ Could not start Steam automatically")
+                print("Please manually start Steam from your applications menu")
+            else:
+                print("✅ Steam is restarting...")
+                print("   Please wait for Steam to fully load, then check your game's launch options")
             
         except Exception as e:
-            print(f"Error restarting Steam: {e}")
+            print(f"❌ Error restarting Steam: {e}")
             print("Please manually restart Steam to apply launch options.")
 
 def main():
@@ -914,26 +1176,49 @@ def main():
                 game_idx = int(input("Game number: ")) - 1
                 selected_game = games[game_idx]
                 
-                exe_paths = manager.find_game_executable_paths(selected_game["path"])
-                if not exe_paths:
-                    print("No suitable executable paths found")
+                print(f"\nAnalyzing game directory: {selected_game['name']}")
+                print("Searching for executable locations...")
+                
+                exe_locations = manager.find_game_executable_paths(selected_game["path"])
+                if not exe_locations:
+                    print("No suitable executable locations found")
+                    print("This game may not be compatible or may have an unusual directory structure")
                     continue
                 
-                print("\nSelect installation directory:")
-                for i, path in enumerate(exe_paths, 1):
-                    print(f"{i}. {path}")
+                print(f"\nFound {len(exe_locations)} possible installation location(s):")
+                print("=" * 80)
                 
-                path_idx = int(input("Path number: ")) - 1
-                selected_path = exe_paths[path_idx]
+                for i, location in enumerate(exe_locations, 1):
+                    print(f"{i}. {location['type']}")
+                    print(f"   Executable: {location['exe_name']}")
+                    print(f"   Path: {location['relative_path'] if location['relative_path'] != '.' else 'Game Root Directory'}")
+                    print(f"   Full Path: {location['path']}")
+                    print()
+                
+                print("Choose the installation location:")
+                print("- Main Game Directory is usually the best choice")
+                print("- Shipping Executable locations work well for UE games")
+                print("- Choose based on where the main game .exe file is located")
+                
+                path_idx = int(input(f"\nInstallation location (1-{len(exe_locations)}): ")) - 1
+                selected_location = exe_locations[path_idx]
+                
+                print(f"\nSelected: {selected_location['type']}")
+                print(f"Installing to: {selected_location['path']}")
                 
                 zip_path = manager.download_latest_nightly()
                 if not zip_path:
                     continue
                 
-                if manager.install_optiscaler(selected_game, selected_path, zip_path):
-                    print("OptiScaler installed successfully!")
+                if manager.install_optiscaler(selected_game, selected_location, zip_path):
+                    print("\n✓ OptiScaler installed successfully!")
+                    print(f"Installation directory: {selected_location['path']}")
+                    print("\nNext steps:")
+                    print("1. The setup_linux.sh script should have been executed")
+                    print("2. Configure launch options in Steam for the game")
+                    print("3. Launch the game and press INSERT to open OptiScaler overlay")
                 else:
-                    print("Installation failed")
+                    print("✗ Installation failed")
                     
             except (ValueError, IndexError):
                 print("Invalid selection")
@@ -944,9 +1229,23 @@ def main():
                 print("No installations found")
                 continue
                 
+            print("\nCurrent OptiScaler Installations:")
+            print("=" * 60)
             for i, install in enumerate(installs, 1):
-                print(f"{i}. {install['game']['name']} - {install['timestamp']}")
+                print(f"{i}. {install['game']['name']}")
+                print(f"   Installed: {install['timestamp']}")
                 print(f"   Path: {install['install_path']}")
+                
+                # Show exe location details if available
+                if 'exe_location' in install:
+                    exe_loc = install['exe_location']
+                    print(f"   Type: {exe_loc['type']}")
+                    print(f"   Executable: {exe_loc['exe_name']}")
+                
+                # Show FSR4 status
+                fsr4_status = "✓ FSR4 DLL copied" if install.get('fsr4_dll_copied', False) else "✗ FSR4 DLL not copied"
+                print(f"   FSR4: {fsr4_status}")
+                print()
         
         elif choice == "4":
             installs = manager.load_installations()
@@ -955,20 +1254,37 @@ def main():
                 continue
                 
             print("\nSelect installation to uninstall:")
+            print("=" * 60)
             for i, install in enumerate(installs, 1):
-                print(f"{i}. {install['game']['name']} - {install['timestamp']}")
+                print(f"{i}. {install['game']['name']}")
+                print(f"   Installed: {install['timestamp']}")
+                print(f"   Path: {install['install_path']}")
+                
+                if 'exe_location' in install:
+                    exe_loc = install['exe_location']
+                    print(f"   Type: {exe_loc['type']}")
+                    print(f"   Executable: {exe_loc['exe_name']}")
+                print()
             
             try:
-                install_idx = int(input("Installation number: ")) - 1
+                install_idx = int(input(f"Installation to uninstall (1-{len(installs)}): ")) - 1
                 selected_install = installs[install_idx]
+                
+                print(f"\nUninstalling OptiScaler from: {selected_install['game']['name']}")
+                print(f"Directory: {selected_install['install_path']}")
+                
+                confirmation = input("Are you sure you want to uninstall? (y/n): ").lower()
+                if confirmation != 'y':
+                    print("Uninstall cancelled")
+                    continue
                 
                 if manager.uninstall_optiscaler(selected_install):
                     installs.pop(install_idx)
                     with open(manager.installs_file, 'w') as f:
                         json.dump(installs, f, indent=2)
-                    print("OptiScaler uninstalled successfully!")
+                    print("✓ OptiScaler uninstalled successfully!")
                 else:
-                    print("Uninstallation failed")
+                    print("✗ Uninstallation failed")
                     
             except (ValueError, IndexError):
                 print("Invalid selection")

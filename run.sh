@@ -16,6 +16,17 @@ if ! pacman -Q p7zip &>/dev/null; then
 fi
 
 echo "Dependencies verified!"
+
+# Check if desktop entry is installed
+if [ ! -f ~/.local/share/applications/optiscaler-manager.desktop ]; then
+    echo "Desktop integration not found. Would you like to install it? (y/n)"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        ./install-desktop-entry.sh
+        echo ""
+    fi
+fi
+
 echo "Starting OptiScaler Manager..."
 echo
 
