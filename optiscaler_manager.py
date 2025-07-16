@@ -1405,6 +1405,14 @@ OverrideNvapiDll=auto
             return False
 
     def add_steam_launch_options(self, app_id: str, rdna3_workaround: bool = False):
+        # ANSI color codes for highlighting
+        CYAN = '\033[96m'
+        YELLOW = '\033[93m'
+        GREEN = '\033[92m'
+        RED = '\033[91m'
+        BOLD = '\033[1m'
+        RESET = '\033[0m'
+        
         print(f"Steam launch options for App ID {app_id}:")
         print("\n=== OptiScaler Basic Setup ===")
         
@@ -1416,8 +1424,8 @@ OverrideNvapiDll=auto
         else:
             basic_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 %command%'
         
-        print(f"Basic: {basic_cmd}")
-        print(f"With MangoHUD: mangohud {basic_cmd}")
+        print(f"Basic: {CYAN}{basic_cmd}{RESET}")
+        print(f"With MangoHUD: {YELLOW}mangohud {basic_cmd}{RESET}")
         
         print("\n=== OptiScaler Advanced Options ===")
         print("For better performance and compatibility:")
@@ -1436,104 +1444,62 @@ OverrideNvapiDll=auto
         else:
             full_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 {" ".join(advanced_options)} %command%'
         
-        print(f"Advanced: {full_cmd}")
-        print(f"Advanced + MangoHUD: mangohud {full_cmd}")
+        print(f"Advanced: {CYAN}{full_cmd}{RESET}")
+        print(f"Advanced + MangoHUD: {YELLOW}mangohud {full_cmd}{RESET}")
         
         print("\n=== OptiScaler Debugging ===")
         if rdna3_workaround:
             debug_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc %command%'
         else:
             debug_cmd = f'{optiscaler_base} PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 %command%'
-        print(f"Debug mode: {debug_cmd}")
-        print(f"Debug + MangoHUD: mangohud {debug_cmd}")
+        print(f"Debug mode: {RED}{debug_cmd}{RESET}")
+        print(f"Debug + MangoHUD: {YELLOW}mangohud {debug_cmd}{RESET}")
         
         print("\n=== Anti-Lag 2 (Experimental) ===")
         if rdna3_workaround:
             antilag_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt,nggc %command%'
         else:
             antilag_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt %command%'
-        print(f"With Anti-Lag 2: {antilag_cmd}")
-        print(f"Anti-Lag 2 + MangoHUD: mangohud {antilag_cmd}")
+        print(f"With Anti-Lag 2: {GREEN}{antilag_cmd}{RESET}")
+        print(f"Anti-Lag 2 + MangoHUD: {YELLOW}mangohud {antilag_cmd}{RESET}")
         
         print("\n=== Game-Specific Tweaks ===")
         print("For Unreal Engine games:")
         ue_cmd = basic_cmd.replace('%command%', '-dx12 %command%')
-        print(f"UE + DX12: {ue_cmd}")
+        print(f"UE + DX12: {CYAN}{ue_cmd}{RESET}")
         
         print("\nFor games with DLSS Frame Generation issues:")
         no_fg_cmd = basic_cmd.replace('dxgi=n,b', 'dxgi=n,b;nvngx=n,b')
-        print(f"Disable DLSS FG: {no_fg_cmd}")
+        print(f"Disable DLSS FG: {CYAN}{no_fg_cmd}{RESET}")
+        
+        print("\n=== FSR4 Specific Commands ===")
+        print("For FSR4 with enhanced settings:")
+        fsr4_enhanced = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%'
+        print(f"FSR4 Enhanced: {GREEN}{fsr4_enhanced}{RESET}")
+        
+        if rdna3_workaround:
+            fsr4_rdna3 = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%'
+            print(f"FSR4 RDNA3 Enhanced: {GREEN}{fsr4_rdna3}{RESET}")
         
         print("\n=== IMPORTANT NOTES ===")
         print("• WINEDLLOVERRIDES=\"dxgi=n,b\" is REQUIRED for OptiScaler to work")
         print("• Start with 'Basic' command first")
         print("• If OptiScaler overlay doesn't appear, try the 'Disable DLSS FG' version")
         print("• Press INSERT in-game to open OptiScaler overlay")
+        print("• Copy and paste commands exactly as shown (they are color-highlighted for easy selection)")
         
-        print("\n=== AUTOMATIC APPLICATION ===")
-        apply_choice = input("Would you like to automatically apply launch options to Steam? (y/n): ").lower()
+        print("\n=== MANUAL APPLICATION ===")
+        print("To apply manually:")
+        print("1. Right-click game in Steam")
+        print("2. Properties > General > Launch Options") 
+        print("3. Copy and paste ONE of the above highlighted commands")
+        print("4. Launch game and press INSERT for OptiScaler overlay")
         
-        if apply_choice == 'y':
-            # Ask about MangoHUD
-            mangohud_choice = input("Include MangoHUD for performance monitoring? (y/n): ").lower()
-            mangohud_prefix = "mangohud " if mangohud_choice == 'y' else ""
-            
-            if rdna3_workaround:
-                option_choice = input("\nWhich RDNA3 option to apply?\n1. Basic RDNA3 (with DXIL_SPIRV_CONFIG)\n2. Advanced RDNA3\n3. Debug RDNA3\n4. Anti-Lag 2 RDNA3\nEnter choice (1-4): ").strip()
-            else:
-                option_choice = input("\nWhich option to apply?\n1. Basic\n2. Advanced\n3. Debug\n4. Anti-Lag 2\nEnter choice (1-4): ").strip()
-            
-            selected_cmd = basic_cmd
-            if option_choice == "2":
-                selected_cmd = full_cmd
-            elif option_choice == "3":
-                selected_cmd = debug_cmd
-            elif option_choice == "4":
-                selected_cmd = antilag_cmd
-            
-            # Add mangohud prefix if requested
-            if mangohud_prefix:
-                selected_cmd = mangohud_prefix + selected_cmd
-            
-            if self.apply_steam_launch_options(app_id, selected_cmd):
-                print("✓ Launch options applied successfully!")
-                print("You can now launch the game directly from Steam.")
-            else:
-                print("⚠ Automatic application failed. Trying to copy to clipboard...")
-                try:
-                    import subprocess
-                    # Try to copy to clipboard using xclip or xsel
-                    clipboard_commands = [
-                        ['xclip', '-selection', 'clipboard'],
-                        ['xsel', '--clipboard', '--input'],
-                        ['wl-copy']  # Wayland
-                    ]
-                    
-                    copied = False
-                    for cmd in clipboard_commands:
-                        try:
-                            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                            proc.communicate(input=selected_cmd.encode())
-                            if proc.returncode == 0:
-                                print(f"✓ Launch command copied to clipboard using {cmd[0]}!")
-                                copied = True
-                                break
-                        except FileNotFoundError:
-                            continue
-                    
-                    if not copied:
-                        print("❌ Could not copy to clipboard (xclip/xsel/wl-copy not found)")
-                except Exception as e:
-                    print(f"❌ Clipboard copy failed: {e}")
-                
-                print("Please apply manually:")
-                print(f"Launch command: {selected_cmd}")
-        else:
-            print("\nTo apply manually:")
-            print("1. Right-click game in Steam")
-            print("2. Properties > General > Launch Options") 
-            print("3. Copy and paste ONE of the above commands")
-            print("4. Launch game and press INSERT for OptiScaler overlay")
+        print(f"\n{BOLD}TIP:{RESET} Commands are color-highlighted for easy copy-pasting!")
+        print(f"  {CYAN}Cyan{RESET} = Basic/Standard commands")
+        print(f"  {YELLOW}Yellow{RESET} = MangoHUD variants")
+        print(f"  {GREEN}Green{RESET} = Enhanced/FSR4 commands")
+        print(f"  {RED}Red{RESET} = Debug commands")
 
     def apply_steam_launch_options(self, app_id: str, launch_command: str) -> bool:
         try:
