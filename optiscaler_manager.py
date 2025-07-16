@@ -11,16 +11,450 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import configparser
 
-try:
-    import requests
-except ImportError:
-    print("Missing required module: requests")
-    print("\nPlease install it using one of these methods:")
-    print("1. pip install requests")
-    print("2. pip install --user requests")
-    print("3. sudo pacman -S python-requests (Arch Linux)")
-    print("4. python -m pip install requests")
+class DependencyManager:
+    """Manages automatic detection and installation of dependencies."""
+    
+    def __init__(self):
+        self.package_managers = {
+            'apt': ['apt', 'apt-get'],
+            'pacman': ['pacman'],
+            'dnf': ['dnf', 'yum'],
+            'zypper': ['zypper'],
+            'emerge': ['emerge'],
+            'apk': ['apk'],
+            'xbps': ['xbps-install'],
+            'pkg': ['pkg'],
+            'brew': ['brew']
+        }
+        self.detected_pm = None
+        self.clipboard_apps = {
+            'xclip': {
+                'name': 'xclip',
+                'description': 'Simple clipboard utility (most common)',
+                'packages': {
+                    'apt': 'xclip',
+                    'pacman': 'xclip',
+                    'dnf': 'xclip',
+                    'zypper': 'xclip',
+                    'emerge': 'x11-misc/xclip',
+                    'apk': 'xclip',
+                    'xbps': 'xclip',
+                    'pkg': 'xclip'
+                }
+            },
+            'xsel': {
+                'name': 'xsel',
+                'description': 'Alternative clipboard utility',
+                'packages': {
+                    'apt': 'xsel',
+                    'pacman': 'xsel',
+                    'dnf': 'xsel',
+                    'zypper': 'xsel',
+                    'emerge': 'x11-misc/xsel',
+                    'apk': 'xsel',
+                    'xbps': 'xsel',
+                    'pkg': 'xsel'
+                }
+            },
+            'wl-copy': {
+                'name': 'wl-copy',
+                'description': 'Wayland clipboard utility',
+                'packages': {
+                    'apt': 'wl-clipboard',
+                    'pacman': 'wl-clipboard',
+                    'dnf': 'wl-clipboard',
+                    'zypper': 'wl-clipboard',
+                    'emerge': 'gui-apps/wl-clipboard',
+                    'apk': 'wl-clipboard',
+                    'xbps': 'wl-clipboard',
+                    'pkg': 'wl-clipboard'
+                }
+            }
+        }
+        
+    def detect_package_manager(self) -> Optional[str]:
+        """Detect the system's package manager."""
+        if self.detected_pm:
+            return self.detected_pm
+            
+        for pm_name, commands in self.package_managers.items():
+            for cmd in commands:
+                try:
+                    result = subprocess.run(['which', cmd], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        self.detected_pm = pm_name
+                        return pm_name
+                except Exception:
+                    continue
+        return None
+    
+    def detect_distro(self) -> str:
+        """Detect Linux distribution."""
+        try:
+            with open('/etc/os-release', 'r') as f:
+                content = f.read()
+                if 'ID=' in content:
+                    for line in content.split('\n'):
+                        if line.startswith('ID='):
+                            return line.split('=')[1].strip('"')
+        except:
+            pass
+        return "unknown"
+    
+    def is_wayland(self) -> bool:
+        """Check if running on Wayland."""
+        return os.environ.get('WAYLAND_DISPLAY') is not None
+    
+    def install_package(self, package_name: str, pm_name: str = None) -> bool:
+        """Install a package using the system package manager."""
+        if not pm_name:
+            pm_name = self.detect_package_manager()
+            
+        if not pm_name:
+            print("❌ No supported package manager found")
+            return False
+            
+        print(f"🔧 Installing {package_name} using {pm_name}...")
+        
+        install_commands = {
+            'apt': ['sudo', 'apt', 'install', '-y', package_name],
+            'pacman': ['sudo', 'pacman', '-S', '--noconfirm', package_name],
+            'dnf': ['sudo', 'dnf', 'install', '-y', package_name],
+            'zypper': ['sudo', 'zypper', 'install', '-y', package_name],
+            'emerge': ['sudo', 'emerge', package_name],
+            'apk': ['sudo', 'apk', 'add', package_name],
+            'xbps': ['sudo', 'xbps-install', '-y', package_name],
+            'pkg': ['sudo', 'pkg', 'install', '-y', package_name],
+            'brew': ['brew', 'install', package_name]
+        }
+        
+        if pm_name not in install_commands:
+            print(f"❌ Package manager {pm_name} not supported")
+            return False
+            
+        try:
+            result = subprocess.run(install_commands[pm_name], capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"✅ Successfully installed {package_name}")
+                return True
+            else:
+                print(f"❌ Failed to install {package_name}: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"❌ Error installing {package_name}: {e}")
+            return False
+    
+    def check_python_module(self, module_name: str, pip_name: str = None) -> bool:
+        """Check if a Python module is available and install if needed."""
+        if not pip_name:
+            pip_name = module_name
+            
+        try:
+            __import__(module_name)
+            return True
+        except ImportError:
+            print(f"❌ Missing Python module: {module_name}")
+            
+            pip_commands = ['pip3', 'pip', 'python3 -m pip', 'python -m pip']
+            
+            for pip_cmd in pip_commands:
+                try:
+                    # Check if pip command exists
+                    check_cmd = pip_cmd.split()[0] if ' ' not in pip_cmd else pip_cmd.split()[-1]
+                    result = subprocess.run(['which', check_cmd], capture_output=True)
+                    if result.returncode != 0:
+                        continue
+                    
+                    print(f"🔧 Installing {pip_name} using {pip_cmd}...")
+                    
+                    # Try installing with pip
+                    install_cmd = f"{pip_cmd} install --user {pip_name}".split()
+                    result = subprocess.run(install_cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"✅ Successfully installed {pip_name}")
+                        # Try importing again
+                        try:
+                            __import__(module_name)
+                            return True
+                        except ImportError:
+                            print("⚠️ Module installed but still not importable, may need to restart")
+                            return False
+                    else:
+                        print(f"❌ Failed with {pip_cmd}: {result.stderr}")
+                        
+                except Exception as e:
+                    print(f"❌ Error with {pip_cmd}: {e}")
+                    continue
+            
+            # If pip installation failed, try system package manager
+            pm = self.detect_package_manager()
+            if pm:
+                python_packages = {
+                    'requests': {
+                        'apt': 'python3-requests',
+                        'pacman': 'python-requests',
+                        'dnf': 'python3-requests',
+                        'zypper': 'python3-requests',
+                        'emerge': 'dev-python/requests',
+                        'apk': 'py3-requests',
+                        'xbps': 'python3-requests'
+                    }
+                }
+                
+                if pip_name in python_packages and pm in python_packages[pip_name]:
+                    package_name = python_packages[pip_name][pm]
+                    return self.install_package(package_name, pm)
+            
+            return False
+    
+    def check_system_tool(self, tool_name: str, package_name: str = None, auto_install: bool = False) -> bool:
+        """Check if a system tool is available and install if needed."""
+        if not package_name:
+            package_name = tool_name
+            
+        try:
+            result = subprocess.run(['which', tool_name], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+        except Exception:
+            pass
+        
+        print(f"❌ Missing system tool: {tool_name}")
+        
+        # Ask user if they want to install (unless auto_install is True)
+        if auto_install:
+            choice = 'y'
+        else:
+            choice = input(f"Install {tool_name}? (y/n): ").lower()
+            
+        if choice == 'y':
+            pm = self.detect_package_manager()
+            if pm:
+                # Map some common package names
+                package_mappings = {
+                    '7z': {
+                        'apt': 'p7zip-full',
+                        'pacman': 'p7zip',
+                        'dnf': 'p7zip',
+                        'zypper': 'p7zip',
+                        'emerge': 'app-arch/p7zip',
+                        'apk': 'p7zip',
+                        'xbps': 'p7zip'
+                    },
+                    'git': {
+                        'apt': 'git',
+                        'pacman': 'git',
+                        'dnf': 'git',
+                        'zypper': 'git',
+                        'emerge': 'dev-vcs/git',
+                        'apk': 'git',
+                        'xbps': 'git'
+                    },
+                    'wine': {
+                        'apt': 'wine',
+                        'pacman': 'wine',
+                        'dnf': 'wine',
+                        'zypper': 'wine',
+                        'emerge': 'app-emulation/wine-vanilla',
+                        'apk': 'wine',
+                        'xbps': 'wine'
+                    },
+                    'curl': {
+                        'apt': 'curl',
+                        'pacman': 'curl',
+                        'dnf': 'curl',
+                        'zypper': 'curl',
+                        'emerge': 'net-misc/curl',
+                        'apk': 'curl',
+                        'xbps': 'curl'
+                    },
+                    'wget': {
+                        'apt': 'wget',
+                        'pacman': 'wget',
+                        'dnf': 'wget',
+                        'zypper': 'wget',
+                        'emerge': 'net-misc/wget',
+                        'apk': 'wget',
+                        'xbps': 'wget'
+                    }
+                }
+                
+                if tool_name in package_mappings and pm in package_mappings[tool_name]:
+                    package_name = package_mappings[tool_name][pm]
+                
+                return self.install_package(package_name, pm)
+        
+        return False
+    
+    def setup_clipboard_app(self) -> bool:
+        """Set up clipboard functionality by installing a clipboard app."""
+        # Check if any clipboard app is already installed
+        installed_apps = []
+        for app_name, app_info in self.clipboard_apps.items():
+            try:
+                result = subprocess.run(['which', app_name], capture_output=True, text=True)
+                if result.returncode == 0:
+                    installed_apps.append(app_name)
+            except Exception:
+                pass
+        
+        if installed_apps:
+            print(f"✅ Found clipboard app(s): {', '.join(installed_apps)}")
+            return True
+        
+        print("❌ No clipboard application found")
+        print("Clipboard functionality is needed for copying Steam launch commands")
+        
+        # Recommend based on display server
+        if self.is_wayland():
+            print("🔍 Detected Wayland - recommending wl-copy")
+            recommended = 'wl-copy'
+        else:
+            print("🔍 Detected X11 - recommending xclip")
+            recommended = 'xclip'
+        
+        print("\nAvailable clipboard applications:")
+        for i, (app_name, app_info) in enumerate(self.clipboard_apps.items(), 1):
+            marker = " (recommended)" if app_name == recommended else ""
+            print(f"{i}. {app_info['name']}: {app_info['description']}{marker}")
+        
+        print(f"{len(self.clipboard_apps) + 1}. Install all clipboard apps")
+        print(f"{len(self.clipboard_apps) + 2}. Skip clipboard setup")
+        
+        try:
+            choice = int(input(f"\nSelect clipboard app (1-{len(self.clipboard_apps) + 2}): "))
+            
+            if choice == len(self.clipboard_apps) + 2:
+                print("⚠️ Skipping clipboard setup - launch commands won't be copied automatically")
+                return False
+            elif choice == len(self.clipboard_apps) + 1:
+                # Install all
+                pm = self.detect_package_manager()
+                if not pm:
+                    print("❌ No package manager detected")
+                    return False
+                
+                success = True
+                for app_name, app_info in self.clipboard_apps.items():
+                    if pm in app_info['packages']:
+                        package_name = app_info['packages'][pm]
+                        if not self.install_package(package_name, pm):
+                            success = False
+                return success
+            elif 1 <= choice <= len(self.clipboard_apps):
+                # Install selected app
+                app_name = list(self.clipboard_apps.keys())[choice - 1]
+                app_info = self.clipboard_apps[app_name]
+                
+                pm = self.detect_package_manager()
+                if not pm:
+                    print("❌ No package manager detected")
+                    return False
+                
+                if pm in app_info['packages']:
+                    package_name = app_info['packages'][pm]
+                    return self.install_package(package_name, pm)
+                else:
+                    print(f"❌ Package not available for {pm}")
+                    return False
+            else:
+                print("❌ Invalid selection")
+                return False
+                
+        except ValueError:
+            print("❌ Invalid input")
+            return False
+    
+    def check_all_dependencies(self) -> bool:
+        """Check and install all required dependencies."""
+        print("🔍 Checking dependencies...")
+        
+        # Detect system info
+        pm = self.detect_package_manager()
+        distro = self.detect_distro()
+        is_wayland = self.is_wayland()
+        
+        print(f"📊 System Info:")
+        print(f"   Distribution: {distro}")
+        print(f"   Package Manager: {pm or 'Not detected'}")
+        print(f"   Display Server: {'Wayland' if is_wayland else 'X11'}")
+        
+        all_ok = True
+        
+        # Check Python modules
+        print("\n🐍 Checking Python modules...")
+        if not self.check_python_module('requests'):
+            all_ok = False
+        
+        # Check system tools
+        print("\n🔧 Checking system tools...")
+        system_tools = {
+            '7z': 'p7zip',
+            'git': 'git',
+            'wine': 'wine',
+            'curl': 'curl',
+            'wget': 'wget'
+        }
+        
+        missing_tools = []
+        for tool_name, package_name in system_tools.items():
+            try:
+                result = subprocess.run(['which', tool_name], capture_output=True, text=True)
+                if result.returncode == 0:
+                    print(f"✅ {tool_name} found")
+                else:
+                    missing_tools.append((tool_name, package_name))
+                    print(f"❌ {tool_name} not found")
+            except Exception:
+                missing_tools.append((tool_name, package_name))
+                print(f"❌ {tool_name} not found")
+        
+        if missing_tools:
+            print(f"\n🔧 Found {len(missing_tools)} missing tools")
+            choice = input("Install all missing tools automatically? (y/n): ").lower()
+            if choice == 'y':
+                for tool_name, package_name in missing_tools:
+                    self.check_system_tool(tool_name, package_name, auto_install=True)
+            else:
+                print("⚠️ Some tools are missing - you can install them individually later")
+        
+        # Check clipboard apps
+        print("\n📋 Checking clipboard functionality...")
+        if not self.setup_clipboard_app():
+            print("⚠️ Clipboard functionality limited")
+        
+        # Check terminal emulators
+        print("\n💻 Checking terminal emulators...")
+        terminal_found = False
+        terminals = ['konsole', 'gnome-terminal', 'xfce4-terminal', 'alacritty', 'kitty', 'terminator', 'xterm']
+        
+        for terminal in terminals:
+            try:
+                result = subprocess.run(['which', terminal], capture_output=True, text=True)
+                if result.returncode == 0:
+                    terminal_found = True
+                    print(f"✅ Found terminal: {terminal}")
+                    break
+            except Exception:
+                pass
+        
+        if not terminal_found:
+            print("⚠️ No common terminal emulator found - OptiScaler setup scripts may need manual execution")
+        
+        return all_ok
+
+# Initialize dependency manager
+dep_manager = DependencyManager()
+
+# Check dependencies at startup
+if not dep_manager.check_python_module('requests'):
+    print("❌ Critical dependency 'requests' could not be installed")
+    print("Please install it manually and restart the program")
     sys.exit(1)
+
+# Now we can safely import requests
+import requests
 
 class OptiScalerManager:
     def __init__(self):
@@ -47,6 +481,178 @@ class OptiScalerManager:
                 return path
         print("Steam installation not found in standard locations")
         return None
+
+    def _find_all_steam_libraries(self) -> List[Path]:
+        """Find all Steam library folders across all drives including external and NTFS."""
+        libraries = []
+        
+        # Start with the main Steam installation
+        if self.steam_path:
+            libraries.append(self.steam_path)
+            
+            # Check for libraryfolders.vdf which lists additional Steam libraries
+            library_config = self.steam_path / "steamapps" / "libraryfolders.vdf"
+            if library_config.exists():
+                try:
+                    with open(library_config, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # Parse VDF format to find library paths
+                    import re
+                    path_matches = re.findall(r'"path"\s*"([^"]+)"', content)
+                    for path_str in path_matches:
+                        library_path = Path(path_str)
+                        if library_path.exists() and library_path not in libraries:
+                            libraries.append(library_path)
+                            print(f"Found additional Steam library: {library_path}")
+                except Exception as e:
+                    print(f"Error reading libraryfolders.vdf: {e}")
+        
+        # Scan all mounted drives for Steam libraries
+        additional_libraries = self._scan_all_drives_for_steam()
+        for lib in additional_libraries:
+            if lib not in libraries:
+                libraries.append(lib)
+        
+        return libraries
+    
+    def _scan_all_drives_for_steam(self) -> List[Path]:
+        """Scan all mounted drives for Steam installations and libraries."""
+        steam_libraries = []
+        
+        # Get all mounted filesystems
+        try:
+            result = subprocess.run(['mount'], capture_output=True, text=True)
+            mount_lines = result.stdout.split('\n')
+            
+            mount_points = []
+            for line in mount_lines:
+                parts = line.split()
+                if len(parts) >= 3 and parts[1] == 'on':
+                    mount_point = parts[2]
+                    # Include common mount points and external drives
+                    if (mount_point.startswith('/mnt/') or 
+                        mount_point.startswith('/media/') or 
+                        mount_point.startswith('/run/media/') or
+                        mount_point == '/' or
+                        mount_point.startswith('/home')):
+                        mount_points.append(Path(mount_point))
+            
+            # Also check common external drive locations
+            external_locations = [
+                Path('/mnt'),
+                Path('/media'),
+                Path('/run/media'),
+            ]
+            
+            for ext_path in external_locations:
+                if ext_path.exists():
+                    try:
+                        for subdir in ext_path.iterdir():
+                            if subdir.is_dir():
+                                mount_points.append(subdir)
+                                # Check subdirectories for user folders
+                                try:
+                                    for user_dir in subdir.iterdir():
+                                        if user_dir.is_dir():
+                                            mount_points.append(user_dir)
+                                except PermissionError:
+                                    pass
+                    except PermissionError:
+                        pass
+            
+            # Search each mount point for Steam-related directories
+            for mount_point in mount_points:
+                steam_dirs = self._find_steam_dirs_in_path(mount_point)
+                steam_libraries.extend(steam_dirs)
+                
+        except Exception as e:
+            print(f"Error scanning drives: {e}")
+        
+        return steam_libraries
+    
+    def _find_steam_dirs_in_path(self, search_path: Path) -> List[Path]:
+        """Find Steam directories in a given path."""
+        steam_dirs = []
+        
+        if not search_path.exists():
+            return steam_dirs
+            
+        try:
+            # Common Steam directory patterns
+            steam_patterns = [
+                "Steam",
+                "steam", 
+                ".steam",
+                ".local/share/Steam",
+                "SteamLibrary",
+                "Games/Steam",
+                "Program Files/Steam",
+                "Program Files (x86)/Steam",
+            ]
+            
+            # Search for Steam directories
+            for pattern in steam_patterns:
+                potential_steam = search_path / pattern
+                if potential_steam.exists():
+                    # Check if it's a valid Steam directory
+                    steamapps_path = potential_steam / "steamapps"
+                    if steamapps_path.exists():
+                        steam_dirs.append(potential_steam)
+                        print(f"Found Steam library at: {potential_steam}")
+            
+            # Also do a broader search for steamapps folders
+            try:
+                for item in search_path.iterdir():
+                    if item.is_dir() and item.name.lower() in ['steamapps', 'steam']:
+                        parent = item.parent
+                        if parent not in steam_dirs:
+                            # Verify it's a Steam directory
+                            if (item / "common").exists() or (parent / "steam.exe").exists():
+                                steam_dirs.append(parent)
+                                print(f"Found Steam directory via steamapps: {parent}")
+            except (PermissionError, OSError):
+                # Skip directories we can't access
+                pass
+                
+        except (PermissionError, OSError):
+            # Skip paths we can't access
+            pass
+            
+        return steam_dirs
+    
+    def _is_ntfs_drive(self, path: Path) -> bool:
+        """Check if a path is on an NTFS filesystem."""
+        try:
+            result = subprocess.run(['stat', '-f', '-c', '%T', str(path)], 
+                                  capture_output=True, text=True)
+            return 'ntfs' in result.stdout.lower()
+        except Exception:
+            return False
+    
+    def _safe_case_insensitive_glob(self, path: Path, pattern: str) -> List[Path]:
+        """Perform case-insensitive glob for NTFS drives."""
+        matches = []
+        
+        # Regular glob first
+        matches.extend(path.glob(pattern))
+        
+        # If on NTFS, also try case variations
+        if self._is_ntfs_drive(path):
+            variations = [
+                pattern.lower(),
+                pattern.upper(),
+                pattern.title(),
+            ]
+            
+            for variation in variations:
+                try:
+                    matches.extend(path.glob(variation))
+                except Exception:
+                    pass
+        
+        # Remove duplicates
+        return list(set(matches))
 
     def _find_fsr4_dll(self) -> Optional[Path]:
         # Check config directory first (user's selected version)
@@ -198,38 +804,78 @@ class OptiScalerManager:
             return []
         
         games = []
-        steamapps_path = self.steam_path / "steamapps"
         
-        for manifest_file in steamapps_path.glob("appmanifest_*.acf"):
-            try:
-                with open(manifest_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                app_id = None
-                name = None
-                install_dir = None
-                
-                for line in content.split('\n'):
-                    line = line.strip()
-                    if line.startswith('"appid"'):
-                        app_id = line.split('"')[3]
-                    elif line.startswith('"name"'):
-                        name = line.split('"')[3]
-                    elif line.startswith('"installdir"'):
-                        install_dir = line.split('"')[3]
-                
-                if app_id and name and install_dir:
-                    game_path = steamapps_path / "common" / install_dir
-                    if game_path.exists():
-                        games.append({
-                            "app_id": app_id,
-                            "name": name,
-                            "install_dir": install_dir,
-                            "path": str(game_path)
-                        })
-            except Exception as e:
-                print(f"Error reading manifest {manifest_file}: {e}")
+        # Get all Steam library locations
+        steam_libraries = self._find_all_steam_libraries()
         
+        print(f"Scanning {len(steam_libraries)} Steam libraries for games...")
+        
+        for library_path in steam_libraries:
+            steamapps_path = library_path / "steamapps"
+            
+            if not steamapps_path.exists():
+                continue
+                
+            print(f"Scanning library: {library_path}")
+            
+            # Find all manifest files in this library (with NTFS support)
+            manifest_files = self._safe_case_insensitive_glob(steamapps_path, "appmanifest_*.acf")
+            
+            for manifest_file in manifest_files:
+                try:
+                    with open(manifest_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    app_id = None
+                    name = None
+                    install_dir = None
+                    
+                    for line in content.split('\n'):
+                        line = line.strip()
+                        if line.startswith('"appid"'):
+                            app_id = line.split('"')[3]
+                        elif line.startswith('"name"'):
+                            name = line.split('"')[3]
+                        elif line.startswith('"installdir"'):
+                            install_dir = line.split('"')[3]
+                    
+                    if app_id and name and install_dir:
+                        game_path = steamapps_path / "common" / install_dir
+                        if game_path.exists():
+                            # Check if we already have this game from another library
+                            existing_game = next((g for g in games if g["app_id"] == app_id), None)
+                            if not existing_game:
+                                games.append({
+                                    "app_id": app_id,
+                                    "name": name,
+                                    "install_dir": install_dir,
+                                    "path": str(game_path),
+                                    "library_path": str(library_path)
+                                })
+                            else:
+                                # Game exists in multiple libraries, keep the one with more recent activity
+                                try:
+                                    existing_mtime = Path(existing_game["path"]).stat().st_mtime
+                                    current_mtime = game_path.stat().st_mtime
+                                    if current_mtime > existing_mtime:
+                                        # Replace with more recent version
+                                        for i, game in enumerate(games):
+                                            if game["app_id"] == app_id:
+                                                games[i] = {
+                                                    "app_id": app_id,
+                                                    "name": name,
+                                                    "install_dir": install_dir,
+                                                    "path": str(game_path),
+                                                    "library_path": str(library_path)
+                                                }
+                                                break
+                                except OSError:
+                                    pass  # Can't get mtime, keep existing
+                                    
+                except Exception as e:
+                    print(f"Error reading manifest {manifest_file}: {e}")
+        
+        print(f"Found {len(games)} games across all Steam libraries")
         return sorted(games, key=lambda x: x["name"])
 
     def find_game_executable_paths(self, game_path: str) -> List[Dict[str, str]]:
@@ -1142,6 +1788,36 @@ OverrideNvapiDll=auto
             print("Please manually restart Steam to apply launch options.")
 
 def main():
+    print("=" * 60)
+    print("🚀 OptiScaler Manager - Enhanced Version")
+    print("=" * 60)
+    
+    # Run startup dependency check
+    print("\n🔍 Running startup dependency check...")
+    if not dep_manager.check_python_module('requests'):
+        print("❌ Critical dependency missing - exiting")
+        sys.exit(1)
+    
+    # Quick check for common tools
+    missing_tools = []
+    tools_to_check = ['7z', 'git', 'wine']
+    
+    for tool in tools_to_check:
+        try:
+            result = subprocess.run(['which', tool], capture_output=True, text=True)
+            if result.returncode != 0:
+                missing_tools.append(tool)
+        except Exception:
+            missing_tools.append(tool)
+    
+    if missing_tools:
+        print(f"⚠️ Optional tools not found: {', '.join(missing_tools)}")
+        print("   Use menu option 9 to install missing dependencies")
+    else:
+        print("✅ All common tools found")
+    
+    print("\n" + "=" * 60)
+    
     manager = OptiScalerManager()
     
     while True:
@@ -1153,14 +1829,17 @@ def main():
         print("5. Download latest nightly")
         print("6. Add Steam launch options")
         print("7. Manage FSR4 DLL")
-        print("8. Exit")
+        print("8. Show drive/library scan details")
+        print("9. Check/Install dependencies")
+        print("10. Exit")
         
-        choice = input("\nEnter choice (1-8): ").strip()
+        choice = input("\nEnter choice (1-10): ").strip()
         
         if choice == "1":
             games = manager.get_steam_games()
             for i, game in enumerate(games, 1):
-                print(f"{i}. {game['name']} (ID: {game['app_id']})")
+                library_info = f" [Library: {game.get('library_path', 'Unknown')}]" if 'library_path' in game else ""
+                print(f"{i}. {game['name']} (ID: {game['app_id']}){library_info}")
         
         elif choice == "2":
             games = manager.get_steam_games()
@@ -1362,6 +2041,65 @@ def main():
                     manager.download_fsr4_dll()
         
         elif choice == "8":
+            # Show drive/library scan details
+            print("\n=== Drive and Library Scan Details ===")
+            
+            # Show mounted drives
+            print("\n1. Mounted Drives:")
+            try:
+                result = subprocess.run(['mount'], capture_output=True, text=True)
+                mount_lines = result.stdout.split('\n')
+                for line in mount_lines:
+                    parts = line.split()
+                    if len(parts) >= 3 and parts[1] == 'on':
+                        device = parts[0]
+                        mount_point = parts[2]
+                        fs_type = parts[4] if len(parts) > 4 else "unknown"
+                        
+                        if (mount_point.startswith('/mnt/') or 
+                            mount_point.startswith('/media/') or 
+                            mount_point.startswith('/run/media/') or
+                            mount_point == '/' or
+                            mount_point.startswith('/home')):
+                            print(f"   {device} -> {mount_point} ({fs_type})")
+            except Exception as e:
+                print(f"   Error reading mount info: {e}")
+            
+            # Show Steam libraries
+            print("\n2. Steam Libraries Found:")
+            libraries = manager._find_all_steam_libraries()
+            for lib in libraries:
+                is_ntfs = manager._is_ntfs_drive(lib)
+                fs_info = " (NTFS)" if is_ntfs else ""
+                print(f"   {lib}{fs_info}")
+                
+                # Show game count for each library
+                steamapps_path = lib / "steamapps"
+                if steamapps_path.exists():
+                    manifests = manager._safe_case_insensitive_glob(steamapps_path, "appmanifest_*.acf")
+                    print(f"     -> {len(manifests)} games")
+            
+            # Show total games
+            games = manager.get_steam_games()
+            print(f"\n3. Total Games Found: {len(games)}")
+            
+            # Show external drive locations checked
+            print("\n4. External Drive Locations Checked:")
+            external_locations = ["/mnt", "/media", "/run/media"]
+            for loc in external_locations:
+                if Path(loc).exists():
+                    print(f"   ✓ {loc}")
+                else:
+                    print(f"   ✗ {loc} (not found)")
+        
+        elif choice == "9":
+            # Check/Install dependencies
+            print("\n=== Dependency Check and Installation ===")
+            dep_manager.check_all_dependencies()
+            
+            input("\nPress Enter to continue...")
+        
+        elif choice == "10":
             break
         
         else:

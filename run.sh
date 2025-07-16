@@ -9,11 +9,10 @@ if ! pacman -Q python-requests &>/dev/null; then
     sudo pacman -S --noconfirm python-requests
 fi
 
-# Check if p7zip and wl-copy is installed
+# Check if p7zip is installed
 if ! pacman -Q p7zip &>/dev/null; then
     echo "Installing p7zip..."
-    sudo pacman -S --noconfirm p7zip 
-    yay -S  --noconfirm wl-copy
+    sudo pacman -S --noconfirm p7zip
 fi
 
 echo "Dependencies verified!"
