@@ -11,7 +11,6 @@ A comprehensive Python-based tool for automatically managing OptiScaler installa
 - ⚙️ **Smart Configuration**: Automatically configures OptiScaler.ini with optimal settings
 - 🖥️ **Desktop Integration**: GUI launcher with application menu integration
 - 📊 **MangoHUD Support**: Optional performance monitoring overlay
-- 🔧 **Launch Options**: Automatically applies Steam launch options with proper VDF formatting
 - 🗂️ **FSR4 Management**: Manages multiple FSR4 DLL versions
 - 📦 **Backup System**: Creates backups before making changes
 - 🔄 **Uninstaller**: Clean removal of OptiScaler installations
