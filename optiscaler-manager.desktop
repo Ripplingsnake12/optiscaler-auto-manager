@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=OptiScaler Manager
-Comment=Manage OptiScaler installations for Steam games
+Name=OptiScaler Manager Streamlined
+Comment=Streamlined OptiScaler installer for Steam games
 GenericName=Game Enhancement Manager
 Icon=optiscaler-icon.svg
-Exec=sh -c "$HOME/optiscaler-auto-manager/launch-gui.sh"
+Exec=sh -c "$HOME/optiscaler-manager-streamlined/launch-gui.sh"
 Terminal=false
 StartupNotify=true
 Categories=Game;Utility;
 Keywords=optiscaler;fsr;dlss;steam;gaming;upscaling;
-Path=$HOME/optiscaler-auto-manager
+Path=$HOME/optiscaler-manager-streamlined

@@ -2075,37 +2075,40 @@ def main():
     
     print("\n" + "=" * 60)
     
+    # Auto-check dependencies on startup
+    if missing_tools:
+        print("🔧 Installing missing dependencies...")
+        dep_manager.check_all_dependencies()
+        print("✅ Dependencies check complete")
+    
     manager = OptiScalerManager()
     
     while True:
         print("\n=== OptiScaler Manager ===")
-        print("1. List Steam games")
-        print("2. Install OptiScaler")
-        print("3. View installations")
-        print("4. Uninstall OptiScaler")
-        print("5. Download latest nightly")
-        print("6. Apply Steam launch options (auto-selectable)")
-        print("7. Manage FSR4 DLL")
-        print("8. Show drive/library scan details")
-        print("9. Check/Install dependencies")
-        print("10. Test VDF launch options functionality")
-        print("11. Exit")
+        print("1. Install OptiScaler")
+        print("2. Manage installed games")
+        print("3. Exit")
         
-        choice = input("\nEnter choice (1-11): ").strip()
+        choice = input("\nEnter choice (1-3): ").strip()
         
         if choice == "1":
-            games = manager.get_steam_games()
-            for i, game in enumerate(games, 1):
-                library_info = f" [Library: {game.get('library_path', 'Unknown')}]" if 'library_path' in game else ""
-                print(f"{i}. {game['name']} (ID: {game['app_id']}){library_info}")
-        
-        elif choice == "2":
+            # Streamlined install process
+            print("\n=== Install OptiScaler ===")
+            
+            # Auto-download latest nightly
+            print("Downloading latest OptiScaler nightly...")
+            zip_path = manager.download_latest_nightly()
+            if not zip_path:
+                print("Failed to download OptiScaler. Please check internet connection.")
+                continue
+                
+            # List games for selection
             games = manager.get_steam_games()
             if not games:
                 print("No Steam games found")
                 continue
                 
-            print("\nSelect a game:")
+            print("\nSelect a game to install OptiScaler:")
             for i, game in enumerate(games, 1):
                 print(f"{i}. {game['name']}")
             
@@ -2143,27 +2146,44 @@ def main():
                 print(f"\nSelected: {selected_location['type']}")
                 print(f"Installing to: {selected_location['path']}")
                 
-                zip_path = manager.download_latest_nightly()
-                if not zip_path:
-                    continue
-                
                 if manager.install_optiscaler(selected_game, selected_location, zip_path):
                     print("\n✓ OptiScaler installed successfully!")
-                    print(f"Installation directory: {selected_location['path']}")
-                    print("\nNext steps:")
-                    print("1. The setup_linux.sh script should have been executed")
-                    print("2. Configure launch options in Steam for the game")
-                    print("3. Launch the game and press INSERT to open OptiScaler overlay")
+                    
+                    # Auto FSR4 setup
+                    print("\nSetting up FSR4 DLL...")
+                    if not manager.fsr4_dll_path or not manager.fsr4_dll_path.exists():
+                        print("FSR4 DLL not found. Attempting to locate...")
+                        manager.select_fsr4_version()
+                    
+                    # Auto apply launch options
+                    print("\nConfiguring Steam launch options...")
+                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
+                    manager.add_steam_launch_options(selected_game["app_id"], rdna3, auto_apply=True)
+                    
+                    print("\n🎉 Installation complete!")
+                    print("✓ OptiScaler installed")
+                    print("✓ FSR4 DLL configured")
+                    print("✓ Steam launch options applied")
+                    print("\nReady to play! Launch the game and press INSERT for OptiScaler overlay")
+                    print("\n💡 Proton Version Recommendation:")
+                    print("   For best compatibility, consider using a custom Proton version:")
+                    print("   • ProtonPlus (recommended)")
+                    print("   • CachyOS Proton")
+                    print("   • EM Proton")
+                    print("   • Bleeding Edge Proton Experimental")
+                    print("   Configure in Steam > Properties > Compatibility > Force specific Steam Play tool")
                 else:
                     print("✗ Installation failed")
                     
             except (ValueError, IndexError):
                 print("Invalid selection")
         
-        elif choice == "3":
+        elif choice == "2":
+            # Manage installed games
+            print("\n=== Manage Installed Games ===")
             installs = manager.load_installations()
             if not installs:
-                print("No installations found")
+                print("No OptiScaler installations found")
                 continue
                 
             print("\nCurrent OptiScaler Installations:")
@@ -2183,220 +2203,61 @@ def main():
                 fsr4_status = "✓ FSR4 DLL copied" if install.get('fsr4_dll_copied', False) else "✗ FSR4 DLL not copied"
                 print(f"   FSR4: {fsr4_status}")
                 print()
-        
-        elif choice == "4":
-            installs = manager.load_installations()
-            if not installs:
-                print("No installations to uninstall")
-                continue
-                
-            print("\nSelect installation to uninstall:")
-            print("=" * 60)
-            for i, install in enumerate(installs, 1):
-                print(f"{i}. {install['game']['name']}")
-                print(f"   Installed: {install['timestamp']}")
-                print(f"   Path: {install['install_path']}")
-                
-                if 'exe_location' in install:
-                    exe_loc = install['exe_location']
-                    print(f"   Type: {exe_loc['type']}")
-                    print(f"   Executable: {exe_loc['exe_name']}")
-                print()
             
-            try:
-                install_idx = int(input(f"Installation to uninstall (1-{len(installs)}): ")) - 1
-                selected_install = installs[install_idx]
-                
-                print(f"\nUninstalling OptiScaler from: {selected_install['game']['name']}")
-                print(f"Directory: {selected_install['install_path']}")
-                
-                confirmation = input("Are you sure you want to uninstall? (y/n): ").lower()
-                if confirmation != 'y':
-                    print("Uninstall cancelled")
-                    continue
-                
-                if manager.uninstall_optiscaler(selected_install):
-                    installs.pop(install_idx)
-                    with open(manager.installs_file, 'w') as f:
-                        json.dump(installs, f, indent=2)
-                    print("✓ OptiScaler uninstalled successfully!")
-                else:
-                    print("✗ Uninstallation failed")
-                    
-            except (ValueError, IndexError):
-                print("Invalid selection")
-        
-        elif choice == "5":
-            zip_path = manager.download_latest_nightly()
-            if zip_path:
-                print(f"Downloaded to: {zip_path}")
-        
-        elif choice == "6":
-            games = manager.get_steam_games()
-            if not games:
-                print("No Steam games found")
-                continue
-                
-            print("\nSelect a game:")
-            for i, game in enumerate(games, 1):
-                print(f"{i}. {game['name']}")
+            print("Actions:")
+            print("1. Uninstall a game")
+            print("2. View launch options for a game")
+            print("3. Back to main menu")
             
-            try:
-                game_idx = int(input("Game number: ")) - 1
-                selected_game = games[game_idx]
-                
-                print(f"\nSelected game: {selected_game['name']} (App ID: {selected_game['app_id']})")
-                
-                # Ask for configuration options
-                print("\nConfiguration options:")
-                print("1. Automatic selection and application")
-                print("2. View all launch options (for manual copy-paste)")
-                
-                config_choice = input("Choose option (1-2): ").strip()
-                
-                if config_choice == "1":
-                    # Interactive mode with automatic application
-                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
-                    manager.add_steam_launch_options(selected_game["app_id"], rdna3, auto_apply=True)
+            action = input("\nSelect action (1-3): ").strip()
+            
+            if action == "1":
+                # Uninstall functionality
+                try:
+                    install_idx = int(input(f"Installation to uninstall (1-{len(installs)}): ")) - 1
+                    selected_install = installs[install_idx]
                     
-                elif config_choice == "2":
-                    # Display mode for manual application
-                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
-                    manager.add_steam_launch_options(selected_game["app_id"], rdna3, auto_apply=False)
+                    print(f"\nUninstalling OptiScaler from: {selected_install['game']['name']}")
+                    print(f"Directory: {selected_install['install_path']}")
                     
-                else:
-                    print("Invalid option")
-                
-            except (ValueError, IndexError):
-                print("Invalid selection")
-        
-        elif choice == "7":
-            print("\n=== FSR4 DLL Management ===")
-            if manager.fsr4_dll_path and manager.fsr4_dll_path.exists():
-                print(f"Current FSR4 DLL: {manager.fsr4_dll_path}")
-                
-                # Try to identify current version
-                current_dll = manager.fsr4_dll_path
-                version_info = "Unknown"
-                
-                # Check if it's in a version directory
-                if "4.0.1" in str(current_dll):
-                    version_info = "FSR 4.0.1"
-                elif "4.0" in str(current_dll):
-                    version_info = "FSR 4.0"
-                
-                print(f"Detected version: {version_info}")
-                
-                print("\n1. Change FSR4 DLL version")
-                print("2. View available versions")
-                print("3. Use current version")
-                
-                sub_choice = input("Enter choice (1-3): ").strip()
-                
-                if sub_choice == "1":
-                    manager.select_fsr4_version()
-                elif sub_choice == "2":
-                    versions = manager.find_available_fsr4_versions()
-                    if versions:
-                        print("\nAvailable FSR4 versions:")
-                        for name, path in versions.items():
-                            print(f"- {name}: {path}")
+                    confirmation = input("Are you sure you want to uninstall? (y/n): ").lower()
+                    if confirmation != 'y':
+                        print("Uninstall cancelled")
+                        continue
+                    
+                    if manager.uninstall_optiscaler(selected_install):
+                        installs.pop(install_idx)
+                        with open(manager.installs_file, 'w') as f:
+                            json.dump(installs, f, indent=2)
+                        print("✓ OptiScaler uninstalled successfully!")
                     else:
-                        print("No bundled FSR4 versions found")
-                elif sub_choice == "3":
-                    print("Continuing with current FSR4 DLL")
-            else:
-                print("No FSR4 DLL found")
-                print("\n1. Select from available versions")
-                print("2. Browse for custom DLL")
-                
-                sub_choice = input("Enter choice (1-2): ").strip()
-                
-                if sub_choice == "1":
-                    manager.select_fsr4_version()
-                elif sub_choice == "2":
-                    manager.download_fsr4_dll()
-        
-        elif choice == "8":
-            # Show drive/library scan details
-            print("\n=== Drive and Library Scan Details ===")
-            
-            # Show mounted drives
-            print("\n1. Mounted Drives:")
-            try:
-                result = subprocess.run(['mount'], capture_output=True, text=True)
-                mount_lines = result.stdout.split('\n')
-                for line in mount_lines:
-                    parts = line.split()
-                    if len(parts) >= 3 and parts[1] == 'on':
-                        device = parts[0]
-                        mount_point = parts[2]
-                        fs_type = parts[4] if len(parts) > 4 else "unknown"
+                        print("✗ Uninstallation failed")
                         
-                        if (mount_point.startswith('/mnt/') or 
-                            mount_point.startswith('/media/') or 
-                            mount_point.startswith('/run/media/') or
-                            mount_point == '/' or
-                            mount_point.startswith('/home')):
-                            print(f"   {device} -> {mount_point} ({fs_type})")
-            except Exception as e:
-                print(f"   Error reading mount info: {e}")
+                except (ValueError, IndexError):
+                    print("Invalid selection")
             
-            # Show Steam libraries
-            print("\n2. Steam Libraries Found:")
-            libraries = manager._find_all_steam_libraries()
-            for lib in libraries:
-                is_ntfs = manager._is_ntfs_drive(lib)
-                fs_info = " (NTFS)" if is_ntfs else ""
-                print(f"   {lib}{fs_info}")
-                
-                # Show game count for each library
-                steamapps_path = lib / "steamapps"
-                if steamapps_path.exists():
-                    manifests = manager._safe_case_insensitive_glob(steamapps_path, "appmanifest_*.acf")
-                    print(f"     -> {len(manifests)} games")
+            elif action == "2":
+                # View launch options
+                try:
+                    install_idx = int(input(f"Game to view launch options (1-{len(installs)}): ")) - 1
+                    selected_install = installs[install_idx]
+                    game = selected_install['game']
+                    
+                    print(f"\nLaunch options for: {game['name']} (App ID: {game['app_id']})")
+                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
+                    manager.add_steam_launch_options(game["app_id"], rdna3, auto_apply=False)
+                    
+                except (ValueError, IndexError):
+                    print("Invalid selection")
             
-            # Show total games
-            games = manager.get_steam_games()
-            print(f"\n3. Total Games Found: {len(games)}")
-            
-            # Show external drive locations checked
-            print("\n4. External Drive Locations Checked:")
-            external_locations = ["/mnt", "/media", "/run/media"]
-            for loc in external_locations:
-                if Path(loc).exists():
-                    print(f"   ✓ {loc}")
-                else:
-                    print(f"   ✗ {loc} (not found)")
+            elif action == "3":
+                continue
         
-        elif choice == "9":
-            # Check/Install dependencies
-            print("\n=== Dependency Check and Installation ===")
-            dep_manager.check_all_dependencies()
-            
-            input("\nPress Enter to continue...")
-        
-        elif choice == "10":
-            # Test VDF launch options functionality
-            print("\n=== Testing VDF Launch Options Functionality ===")
-            try:
-                import subprocess
-                result = subprocess.run(['python3', 'test_vdf_launch_options.py'], 
-                                     capture_output=False, text=True)
-                if result.returncode == 0:
-                    print("✅ All tests passed!")
-                else:
-                    print("❌ Some tests failed!")
-            except Exception as e:
-                print(f"❌ Error running tests: {e}")
-            
-            input("\nPress Enter to continue...")
-        
-        elif choice == "11":
+        elif choice == "3":
             break
         
         else:
-            print("Invalid choice")
+            print("Invalid choice. Please enter 1, 2, or 3.")
 
 if __name__ == "__main__":
     main()
