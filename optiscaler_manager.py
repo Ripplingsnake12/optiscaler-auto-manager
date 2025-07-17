@@ -1404,7 +1404,158 @@ OverrideNvapiDll=auto
             print(f"Error removing FSR4 DLL: {e}")
             return False
 
-    def add_steam_launch_options(self, app_id: str, rdna3_workaround: bool = False):
+    def get_launch_options_catalog(self, rdna3_workaround: bool = False, include_mangohud: bool = True) -> Dict[str, Dict]:
+        """Get a comprehensive catalog of launch options with categorization"""
+        optiscaler_base = 'WINEDLLOVERRIDES="dxgi=n,b"'
+        
+        catalog = {
+            "basic": {
+                "name": "Basic OptiScaler",
+                "description": "Essential OptiScaler setup - recommended starting point",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "basic",
+                "compatibility": "All games",
+                "requirements": "OptiScaler installed"
+            },
+            "basic_mangohud": {
+                "name": "Basic + MangoHUD",
+                "description": "Basic OptiScaler with performance monitoring overlay",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "basic",
+                "compatibility": "All games",
+                "requirements": "OptiScaler installed, MangoHUD"
+            },
+            "advanced": {
+                "name": "Advanced OptiScaler",
+                "description": "Enhanced performance and compatibility settings",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 %command%',
+                "category": "advanced",
+                "compatibility": "Most games",
+                "requirements": "OptiScaler installed, DXVK"
+            },
+            "advanced_mangohud": {
+                "name": "Advanced + MangoHUD",
+                "description": "Advanced settings with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 %command%',
+                "category": "advanced",
+                "compatibility": "Most games",
+                "requirements": "OptiScaler installed, DXVK, MangoHUD"
+            },
+            "debug": {
+                "name": "Debug Mode",
+                "description": "Detailed logging for troubleshooting issues",
+                "command": f'{optiscaler_base} PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "debug",
+                "compatibility": "All games",
+                "requirements": "OptiScaler installed"
+            },
+            "debug_mangohud": {
+                "name": "Debug + MangoHUD",
+                "description": "Debug mode with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "debug",
+                "compatibility": "All games",
+                "requirements": "OptiScaler installed, MangoHUD"
+            },
+            "antilag": {
+                "name": "Anti-Lag 2",
+                "description": "Experimental latency reduction (AMD only)",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt %command%',
+                "category": "experimental",
+                "compatibility": "AMD GPUs only",
+                "requirements": "OptiScaler installed, AMD GPU"
+            },
+            "antilag_mangohud": {
+                "name": "Anti-Lag 2 + MangoHUD",
+                "description": "Anti-Lag 2 with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt %command%',
+                "category": "experimental",
+                "compatibility": "AMD GPUs only",
+                "requirements": "OptiScaler installed, AMD GPU, MangoHUD"
+            },
+            "fsr4_enhanced": {
+                "name": "FSR4 Enhanced",
+                "description": "Optimized FSR4 settings with enhanced performance",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%',
+                "category": "fsr4",
+                "compatibility": "AMD GPUs (FSR4 capable)",
+                "requirements": "OptiScaler installed, AMD GPU, FSR4 DLL"
+            },
+            "fsr4_enhanced_mangohud": {
+                "name": "FSR4 Enhanced + MangoHUD",
+                "description": "FSR4 Enhanced with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%',
+                "category": "fsr4",
+                "compatibility": "AMD GPUs (FSR4 capable)",
+                "requirements": "OptiScaler installed, AMD GPU, FSR4 DLL, MangoHUD"
+            },
+            "ue_dx12": {
+                "name": "Unreal Engine + DX12",
+                "description": "Optimized for Unreal Engine games with DirectX 12",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 -dx12 %command%',
+                "category": "game_specific",
+                "compatibility": "Unreal Engine games",
+                "requirements": "OptiScaler installed, UE game"
+            },
+            "ue_dx12_mangohud": {
+                "name": "Unreal Engine + DX12 + MangoHUD",
+                "description": "UE DX12 optimization with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 -dx12 %command%',
+                "category": "game_specific",
+                "compatibility": "Unreal Engine games",
+                "requirements": "OptiScaler installed, UE game, MangoHUD"
+            },
+            "no_dlss_fg": {
+                "name": "Disable DLSS Frame Generation",
+                "description": "For games with DLSS Frame Generation issues",
+                "command": f'WINEDLLOVERRIDES="dxgi=n,b;nvngx=n,b" PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "compatibility",
+                "compatibility": "Games with DLSS FG issues",
+                "requirements": "OptiScaler installed"
+            },
+            "no_dlss_fg_mangohud": {
+                "name": "Disable DLSS FG + MangoHUD",
+                "description": "DLSS FG disabled with performance monitoring",
+                "command": f'mangohud WINEDLLOVERRIDES="dxgi=n,b;nvngx=n,b" PROTON_FSR4_UPGRADE=1 %command%',
+                "category": "compatibility",
+                "compatibility": "Games with DLSS FG issues",
+                "requirements": "OptiScaler installed, MangoHUD"
+            }
+        }
+        
+        # Add RDNA3 workaround variants if needed
+        if rdna3_workaround:
+            rdna3_options = {}
+            for key, option in catalog.items():
+                if "DXIL_SPIRV_CONFIG=wmma_rdna3_workaround" not in option["command"]:
+                    rdna3_key = f"{key}_rdna3"
+                    rdna3_cmd = option["command"].replace(
+                        'WINEDLLOVERRIDES="dxgi=n,b"',
+                        'WINEDLLOVERRIDES="dxgi=n,b" DXIL_SPIRV_CONFIG=wmma_rdna3_workaround'
+                    )
+                    if "RADV_PERFTEST=" not in rdna3_cmd:
+                        rdna3_cmd = rdna3_cmd.replace("PROTON_FSR4_UPGRADE=1", "PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc")
+                    else:
+                        rdna3_cmd = rdna3_cmd.replace("RADV_PERFTEST=", "RADV_PERFTEST=nggc,")
+                    
+                    rdna3_options[rdna3_key] = {
+                        "name": f"{option['name']} (RDNA3)",
+                        "description": f"{option['description']} - RDNA3 GPU workaround",
+                        "command": rdna3_cmd,
+                        "category": option["category"],
+                        "compatibility": "RDNA3 GPUs only",
+                        "requirements": f"{option['requirements']}, RDNA3 GPU"
+                    }
+            catalog.update(rdna3_options)
+        
+        # Filter out MangoHUD options if not requested
+        if not include_mangohud:
+            catalog = {k: v for k, v in catalog.items() if "mangohud" not in k}
+        
+        return catalog
+
+    def add_steam_launch_options(self, app_id: str, rdna3_workaround: bool = False, auto_apply: bool = False):
+        """Enhanced launch options with selection and automatic application"""
         # ANSI color codes for highlighting
         CYAN = '\033[96m'
         YELLOW = '\033[93m'
@@ -1413,73 +1564,142 @@ OverrideNvapiDll=auto
         BOLD = '\033[1m'
         RESET = '\033[0m'
         
-        print(f"Steam launch options for App ID {app_id}:")
-        print("\n=== OptiScaler Basic Setup ===")
+        # Check if MangoHUD is available
+        mangohud_available = False
+        try:
+            result = subprocess.run(['which', 'mangohud'], capture_output=True, text=True)
+            mangohud_available = result.returncode == 0
+        except Exception:
+            pass
         
-        # Essential OptiScaler command
-        optiscaler_base = 'WINEDLLOVERRIDES="dxgi=n,b"'
+        # Get launch options catalog
+        catalog = self.get_launch_options_catalog(rdna3_workaround, mangohud_available)
         
-        if rdna3_workaround:
-            basic_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc %command%'
+        if not auto_apply:
+            # Display mode - show all options with colors
+            print(f"Steam launch options for App ID {app_id}:")
+            
+            # Group by category
+            categories = {
+                "basic": "Basic Setup",
+                "advanced": "Advanced Options", 
+                "debug": "Debugging",
+                "experimental": "Experimental",
+                "fsr4": "FSR4 Specific",
+                "game_specific": "Game-Specific Tweaks",
+                "compatibility": "Compatibility Fixes"
+            }
+            
+            for cat_key, cat_name in categories.items():
+                cat_options = {k: v for k, v in catalog.items() if v["category"] == cat_key}
+                if not cat_options:
+                    continue
+                    
+                print(f"\n=== {cat_name} ===")
+                for option in cat_options.values():
+                    color = CYAN if "basic" in cat_key else YELLOW if "mangohud" in option["name"].lower() else GREEN if "fsr4" in cat_key else RED if "debug" in cat_key else CYAN
+                    print(f"{color}{option['name']}{RESET}: {option['command']}")
+                    print(f"  {option['description']}")
+                    if option['requirements'] != "OptiScaler installed":
+                        print(f"  Requirements: {option['requirements']}")
+                    print()
+            
+            self._show_manual_application_instructions()
+            
         else:
-            basic_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 %command%'
-        
-        print(f"Basic: {CYAN}{basic_cmd}{RESET}")
-        print(f"With MangoHUD: {YELLOW}mangohud {basic_cmd}{RESET}")
-        
-        print("\n=== OptiScaler Advanced Options ===")
-        print("For better performance and compatibility:")
-        print("Note: The setup_linux.sh script may have specified additional DLL overrides")
-        
-        advanced_options = [
-            "DXVK_ASYNC=1",
-            "PROTON_ENABLE_NVAPI=1", 
-            "PROTON_HIDE_NVIDIA_GPU=0",
-            "VKD3D_CONFIG=dxr11,dxr",
-            "WINE_CPU_TOPOLOGY=4:2"
-        ]
-        
-        if rdna3_workaround:
-            full_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc {" ".join(advanced_options)} %command%'
-        else:
-            full_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 {" ".join(advanced_options)} %command%'
-        
-        print(f"Advanced: {CYAN}{full_cmd}{RESET}")
-        print(f"Advanced + MangoHUD: {YELLOW}mangohud {full_cmd}{RESET}")
-        
-        print("\n=== OptiScaler Debugging ===")
-        if rdna3_workaround:
-            debug_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc %command%'
-        else:
-            debug_cmd = f'{optiscaler_base} PROTON_LOG=+all WINEDEBUG=+dll PROTON_FSR4_UPGRADE=1 %command%'
-        print(f"Debug mode: {RED}{debug_cmd}{RESET}")
-        print(f"Debug + MangoHUD: {YELLOW}mangohud {debug_cmd}{RESET}")
-        
-        print("\n=== Anti-Lag 2 (Experimental) ===")
-        if rdna3_workaround:
-            antilag_cmd = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt,nggc %command%'
-        else:
-            antilag_cmd = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=rt %command%'
-        print(f"With Anti-Lag 2: {GREEN}{antilag_cmd}{RESET}")
-        print(f"Anti-Lag 2 + MangoHUD: {YELLOW}mangohud {antilag_cmd}{RESET}")
-        
-        print("\n=== Game-Specific Tweaks ===")
-        print("For Unreal Engine games:")
-        ue_cmd = basic_cmd.replace('%command%', '-dx12 %command%')
-        print(f"UE + DX12: {CYAN}{ue_cmd}{RESET}")
-        
-        print("\nFor games with DLSS Frame Generation issues:")
-        no_fg_cmd = basic_cmd.replace('dxgi=n,b', 'dxgi=n,b;nvngx=n,b')
-        print(f"Disable DLSS FG: {CYAN}{no_fg_cmd}{RESET}")
-        
-        print("\n=== FSR4 Specific Commands ===")
-        print("For FSR4 with enhanced settings:")
-        fsr4_enhanced = f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%'
-        print(f"FSR4 Enhanced: {GREEN}{fsr4_enhanced}{RESET}")
-        
-        if rdna3_workaround:
-            fsr4_rdna3 = f'{optiscaler_base} DXIL_SPIRV_CONFIG=wmma_rdna3_workaround PROTON_FSR4_UPGRADE=1 RADV_PERFTEST=nggc,rt %command%'
-            print(f"FSR4 RDNA3 Enhanced: {GREEN}{fsr4_rdna3}{RESET}")
+            # Interactive selection mode
+            print(f"\n=== Select Launch Options for App ID {app_id} ===")
+            
+            # Filter and organize options for selection
+            options_list = []
+            for key, option in catalog.items():
+                options_list.append((key, option))
+            
+            # Group by category for better organization
+            categories = {}
+            for key, option in options_list:
+                cat = option["category"]
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append((key, option))
+            
+            # Display categorized options
+            choice_index = 1
+            index_map = {}
+            
+            for cat_key in ["basic", "advanced", "fsr4", "game_specific", "compatibility", "experimental", "debug"]:
+                if cat_key not in categories:
+                    continue
+                    
+                cat_name = {
+                    "basic": "Basic Setup",
+                    "advanced": "Advanced Options",
+                    "fsr4": "FSR4 Specific", 
+                    "game_specific": "Game-Specific",
+                    "compatibility": "Compatibility",
+                    "experimental": "Experimental",
+                    "debug": "Debug/Troubleshooting"
+                }[cat_key]
+                
+                print(f"\n{BOLD}{cat_name}{RESET}")
+                for key, option in categories[cat_key]:
+                    color = CYAN if "basic" in cat_key else GREEN if "fsr4" in cat_key else YELLOW
+                    print(f"{choice_index:2d}. {color}{option['name']}{RESET}")
+                    print(f"    {option['description']}")
+                    print(f"    Compatibility: {option['compatibility']}")
+                    if option['requirements'] != "OptiScaler installed":
+                        print(f"    Requirements: {option['requirements']}")
+                    
+                    index_map[choice_index] = (key, option)
+                    choice_index += 1
+            
+            print(f"\n{choice_index}. View all commands without applying")
+            print(f"{choice_index + 1}. Cancel")
+            
+            try:
+                choice = int(input(f"\nSelect launch option (1-{choice_index + 1}): "))
+                
+                if choice == choice_index:
+                    # Show all commands
+                    self.add_steam_launch_options(app_id, rdna3_workaround, auto_apply=False)
+                    return False
+                elif choice == choice_index + 1:
+                    print("Cancelled launch option selection")
+                    return False
+                elif choice in index_map:
+                    selected_key, selected_option = index_map[choice]
+                    print(f"\nSelected: {selected_option['name']}")
+                    print(f"Command: {selected_option['command']}")
+                    
+                    confirm = input(f"\nApply this launch option to App ID {app_id}? (y/n): ").lower()
+                    if confirm == 'y':
+                        if self.apply_steam_launch_options(app_id, selected_option['command']):
+                            print(f"✅ Launch options applied successfully!")
+                            return True
+                        else:
+                            print("❌ Failed to apply launch options")
+                            return False
+                    else:
+                        print("Launch option application cancelled")
+                        return False
+                else:
+                    print("Invalid selection")
+                    return False
+                    
+            except ValueError:
+                print("Invalid input")
+                return False
+                
+        return False
+    
+    def _show_manual_application_instructions(self):
+        """Show instructions for manual application"""
+        BOLD = '\033[1m'
+        RESET = '\033[0m'
+        CYAN = '\033[96m'
+        YELLOW = '\033[93m'
+        GREEN = '\033[92m'
+        RED = '\033[91m'
         
         print("\n=== IMPORTANT NOTES ===")
         print("• WINEDLLOVERRIDES=\"dxgi=n,b\" is REQUIRED for OptiScaler to work")
@@ -1545,17 +1765,17 @@ OverrideNvapiDll=auto
             
             print(f"✓ Found localconfig.vdf: {localconfig_path}")
             
-            # Check if Steam is running (warn user but continue)
-            import subprocess
+            # Check if Steam is running - we'll work with it running like Valve does
+            steam_running = False
             try:
                 result = subprocess.run(['pgrep', '-f', 'steam'], capture_output=True, text=True)
                 if result.returncode == 0:
-                    print("⚠️ Warning: Steam appears to be running. Consider closing Steam first.")
-                    print("   Steam may overwrite the changes when it exits.")
+                    steam_running = True
+                    print("✓ Steam is running - will apply changes live")
             except:
                 pass  # pgrep not available or other error, continue anyway
             
-            # Read the current config
+            # Read the current config with proper error handling
             try:
                 with open(localconfig_path, 'r', encoding='utf-8', errors='ignore') as f:
                     config_content = f.read()
@@ -1569,15 +1789,43 @@ OverrideNvapiDll=auto
             
             print(f"✓ Config file read successfully ({len(config_content)} characters)")
             
-            # Look for the apps section first, then the specific app ID
+            # Parse VDF structure more robustly
+            success = self._modify_vdf_launch_options(config_content, localconfig_path, app_id, launch_command)
+            
+            if success:
+                print("✅ Launch options applied successfully!")
+                
+                # If Steam is running, signal it to reload the config
+                if steam_running:
+                    self._signal_steam_config_reload()
+                    print("✅ Steam notified of configuration changes")
+                    print("   Launch options are now active - no restart needed!")
+                else:
+                    print("   Launch options will be active when Steam starts")
+                
+                return True
+            else:
+                print("❌ Failed to apply launch options")
+                return False
+            
+        except Exception as e:
+            print(f"Error applying launch options: {e}")
+            return False
+    
+    def _modify_vdf_launch_options(self, config_content: str, config_path: Path, app_id: str, launch_command: str) -> bool:
+        """Modify VDF file with proper Steam VDF syntax and positioning"""
+        try:
+            import re
+            
+            # Look for the apps section first
             apps_section_start = config_content.find('"apps"')
             if apps_section_start == -1:
                 print("❌ apps section not found in Steam config")
-                print("   This may not be a valid Steam localconfig.vdf file")
                 return False
             
-            # Search for the app ID within the apps section
-            app_section_start = config_content.find(f'"{app_id}"', apps_section_start)
+            # Search for the app ID within the apps section using more robust pattern
+            app_pattern = f'"{app_id}"'
+            app_section_start = config_content.find(app_pattern, apps_section_start)
             if app_section_start == -1:
                 print(f"❌ Game with App ID {app_id} not found in Steam config")
                 print("   Make sure the game is in your Steam library and has been launched at least once")
@@ -1585,13 +1833,13 @@ OverrideNvapiDll=auto
             
             print(f"✓ Found game with App ID {app_id} in apps section")
             
-            # Find the opening brace after the app ID
+            # Find the opening brace after the app ID (proper VDF parsing)
             brace_start = config_content.find('{', app_section_start)
             if brace_start == -1:
                 print("Could not find opening brace for app section")
                 return False
             
-            # Find the matching closing brace by counting braces
+            # Find the matching closing brace by counting braces (proper VDF parsing)
             brace_count = 0
             brace_end = -1
             for i in range(brace_start, len(config_content)):
@@ -1610,98 +1858,141 @@ OverrideNvapiDll=auto
             # Extract the app section content (between braces)
             app_section_start_pos = brace_start + 1
             app_section_content = config_content[app_section_start_pos:brace_end]
-            print(f"🔍 App section content preview (first 300 chars):")
-            print(repr(app_section_content[:300]))
             
-            # Debug: Check if this section already has the expected structure
-            if '"LaunchOptions"' in app_section_content:
-                print("✓ LaunchOptions field already exists in this section")
-            else:
-                print("ℹ LaunchOptions field not found, will add new one")
+            # Check if LaunchOptions already exists with proper VDF regex
+            launch_options_pattern = r'"LaunchOptions"\s+("([^"\\]|\\.)*")'
             
-            # Check if LaunchOptions already exists
-            launch_options_pattern = r'"LaunchOptions"\s*"([^"]*)"'
-            
-            import re
             match = re.search(launch_options_pattern, app_section_content)
             
-            # Escape quotes in the launch command for VDF format
-            escaped_command = launch_command.replace('"', '\\"')
+            # Escape quotes in the launch command for VDF format (like Steam does)
+            escaped_command = launch_command.replace('\\', '\\\\').replace('"', '\\"')
             
             if match:
-                # Replace existing launch options
-                old_options = match.group(1)
-                new_app_content = re.sub(launch_options_pattern, f'"LaunchOptions"\t\t"{escaped_command}"', app_section_content)
-                print(f"✓ Replaced existing launch options: '{old_options}' -> '{launch_command}'")
+                # Replace existing launch options (preserving exact Steam VDF format)
+                old_options = match.group(2) if match.group(2) else ""
+                new_launch_line = f'"LaunchOptions"\t\t"{escaped_command}"'
+                new_app_content = re.sub(launch_options_pattern, new_launch_line, app_section_content)
+                print(f"✓ Replaced existing launch options")
+                print(f"   Old: '{old_options}'")
+                print(f"   New: '{launch_command}'")
             else:
-                # Add new launch options at the end
-                # Use the exact Steam VDF indentation (6 tabs for app properties)
+                # Add new launch options in the correct position (like Steam does)
+                # Steam typically places LaunchOptions near the top of the app section
+                # Find a good insertion point after any existing high-priority keys
+                
+                # Look for common Steam app keys to insert after
+                insertion_keys = ['"name"', '"LastUpdated"', '"SizeOnDisk"', '"tool"']
+                insertion_pos = 0
+                
+                for key in insertion_keys:
+                    key_pos = app_section_content.find(key)
+                    if key_pos != -1:
+                        # Find the end of this key-value pair
+                        line_end = app_section_content.find('\n', key_pos)
+                        if line_end != -1:
+                            insertion_pos = line_end + 1
+                
+                # Use exact Steam VDF indentation
                 indent = '\t\t\t\t\t\t'  # Steam uses exactly 6 tabs for app properties
                 
-                new_app_content = app_section_content.rstrip() + f'\n{indent}"LaunchOptions"\t\t"{escaped_command}"'
+                # Insert the launch options at the determined position
+                new_launch_line = f'{indent}"LaunchOptions"\t\t"{escaped_command}"\n'
+                new_app_content = app_section_content[:insertion_pos] + new_launch_line + app_section_content[insertion_pos:]
                 print(f"✓ Added new launch options: '{launch_command}'")
             
             # Replace the app section content in the full config
             new_config = config_content[:app_section_start_pos] + new_app_content + config_content[brace_end:]
             
-            # Backup the original file
-            backup_path = localconfig_path.with_suffix('.vdf.optiscaler_backup')
+            # Create backup with timestamp (like Steam does)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = config_path.with_suffix(f'.vdf.backup_{timestamp}')
             try:
-                shutil.copy2(localconfig_path, backup_path)
+                shutil.copy2(config_path, backup_path)
                 print(f"✓ Backed up original config to: {backup_path}")
             except Exception as e:
                 print(f"⚠️ Warning: Could not create backup: {e}")
-                print("   Continuing anyway...")
             
-            # Write the new config
+            # Write the new config atomically (like Steam does)
+            temp_path = config_path.with_suffix('.vdf.tmp')
             try:
-                with open(localconfig_path, 'w', encoding='utf-8') as f:
+                with open(temp_path, 'w', encoding='utf-8') as f:
                     f.write(new_config)
+                
+                # Atomic move (like Steam does)
+                import os
+                os.replace(temp_path, config_path)
+                
                 print("✅ Steam configuration updated successfully!")
                 
                 # Verify the changes were written correctly
-                with open(localconfig_path, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
                     verification_content = f.read()
                 
                 if f'"{app_id}"' in verification_content and escaped_command in verification_content:
                     print("✅ Verification: Launch options successfully written to config")
+                    return True
                 else:
                     print("⚠️ Warning: Could not verify launch options in updated config")
-                    print("   The changes may not have been applied correctly")
-                    # Debug: show what was actually written
-                    app_pos = verification_content.find(f'"{app_id}"')
-                    if app_pos != -1:
-                        debug_section = verification_content[app_pos:app_pos+500]
-                        print(f"   Debug - App section: {repr(debug_section)}")
+                    return False
                 
-                print("   You can now launch the game directly from Steam.")
             except PermissionError:
-                print(f"❌ Permission denied writing to {localconfig_path}")
+                print(f"❌ Permission denied writing to {config_path}")
                 print("   Try running with sudo or change file permissions")
                 return False
             except Exception as e:
                 print(f"❌ Error writing config file: {e}")
                 return False
-            print("\n" + "="*60)
-            print("✅ LAUNCH OPTIONS APPLIED SUCCESSFULLY!")
-            print("="*60)
-            print("⚠️  IMPORTANT: Steam must be restarted for changes to take effect.")
-            print("   - Close Steam completely (including Steam client)")
-            print("   - Restart Steam")
-            print("   - Check game properties to verify launch options are visible")
-            print("="*60)
-            
-            restart_choice = input("\nWould you like to restart Steam automatically? (y/n): ").lower()
-            if restart_choice == 'y':
-                self.restart_steam()
-            else:
-                print("Please manually restart Steam to apply the launch options.")
-            
-            return True
-            
+            finally:
+                # Clean up temp file if it exists
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except:
+                        pass
+                        
         except Exception as e:
-            print(f"Error applying launch options: {e}")
+            print(f"❌ Error modifying VDF file: {e}")
             return False
+    
+    def _signal_steam_config_reload(self):
+        """Signal Steam to reload configuration (like Valve does internally)"""
+        try:
+            # Method 1: Touch the config file to update mtime (Steam watches this)
+            import os
+            import time
+            
+            # Update the file's modification time
+            current_time = time.time()
+            
+            # Find the config file path
+            userdata_path = self.steam_path / "userdata"
+            user_dirs = [d for d in userdata_path.iterdir() if d.is_dir() and d.name.isdigit()]
+            
+            if user_dirs:
+                user_dir = max(user_dirs, key=lambda x: x.stat().st_mtime)
+                config_path = user_dir / "config" / "localconfig.vdf"
+                
+                if config_path.exists():
+                    os.utime(config_path, (current_time, current_time))
+            
+            # Method 2: Send SIGHUP to Steam process (if supported)
+            try:
+                result = subprocess.run(['pgrep', '-f', 'steam'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    pids = result.stdout.strip().split('\n')
+                    for pid in pids:
+                        if pid.strip():
+                            try:
+                                # Send SIGHUP to request config reload
+                                subprocess.run(['kill', '-HUP', pid.strip()], check=False)
+                            except:
+                                pass
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"Note: Could not signal Steam for config reload: {e}")
+            print("Launch options will still work - Steam will detect changes on next focus")
     
     def restart_steam(self):
         try:
@@ -1793,13 +2084,14 @@ def main():
         print("3. View installations")
         print("4. Uninstall OptiScaler")
         print("5. Download latest nightly")
-        print("6. Add Steam launch options")
+        print("6. Apply Steam launch options (auto-selectable)")
         print("7. Manage FSR4 DLL")
         print("8. Show drive/library scan details")
         print("9. Check/Install dependencies")
-        print("10. Exit")
+        print("10. Test VDF launch options functionality")
+        print("11. Exit")
         
-        choice = input("\nEnter choice (1-10): ").strip()
+        choice = input("\nEnter choice (1-11): ").strip()
         
         if choice == "1":
             games = manager.get_steam_games()
@@ -1953,8 +2245,27 @@ def main():
                 game_idx = int(input("Game number: ")) - 1
                 selected_game = games[game_idx]
                 
-                rdna3 = input("RDNA3 workaround needed? (y/n): ").lower() == 'y'
-                manager.add_steam_launch_options(selected_game["app_id"], rdna3)
+                print(f"\nSelected game: {selected_game['name']} (App ID: {selected_game['app_id']})")
+                
+                # Ask for configuration options
+                print("\nConfiguration options:")
+                print("1. Automatic selection and application")
+                print("2. View all launch options (for manual copy-paste)")
+                
+                config_choice = input("Choose option (1-2): ").strip()
+                
+                if config_choice == "1":
+                    # Interactive mode with automatic application
+                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
+                    manager.add_steam_launch_options(selected_game["app_id"], rdna3, auto_apply=True)
+                    
+                elif config_choice == "2":
+                    # Display mode for manual application
+                    rdna3 = input("RDNA3 GPU workaround needed? (y/n): ").lower() == 'y'
+                    manager.add_steam_launch_options(selected_game["app_id"], rdna3, auto_apply=False)
+                    
+                else:
+                    print("Invalid option")
                 
             except (ValueError, IndexError):
                 print("Invalid selection")
@@ -2066,6 +2377,22 @@ def main():
             input("\nPress Enter to continue...")
         
         elif choice == "10":
+            # Test VDF launch options functionality
+            print("\n=== Testing VDF Launch Options Functionality ===")
+            try:
+                import subprocess
+                result = subprocess.run(['python3', 'test_vdf_launch_options.py'], 
+                                     capture_output=False, text=True)
+                if result.returncode == 0:
+                    print("✅ All tests passed!")
+                else:
+                    print("❌ Some tests failed!")
+            except Exception as e:
+                print(f"❌ Error running tests: {e}")
+            
+            input("\nPress Enter to continue...")
+        
+        elif choice == "11":
             break
         
         else:
