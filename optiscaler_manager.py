@@ -1404,6 +1404,252 @@ OverrideNvapiDll=auto
             print(f"Error removing FSR4 DLL: {e}")
             return False
 
+    def install_lsfg_vk(self) -> bool:
+        """Install LSFG-VK (Lossless Scaling Frame Generation for Vulkan)"""
+        print("🚀 LSFG-VK Installation")
+        print("=" * 60)
+        print("LSFG-VK brings Lossless Scaling's Frame Generation to Linux")
+        print("This will download and install LSFG-VK from the official repository")
+        print()
+        print("Requirements:")
+        print("• You must own Lossless Scaling on Steam")
+        print("• Vulkan drivers must be installed")
+        print("• DXVK is recommended")
+        print()
+        
+        # Check prerequisites
+        print("🔍 Checking prerequisites...")
+        
+        # Check if git is available
+        try:
+            subprocess.run(['git', '--version'], capture_output=True, check=True)
+            print("✓ Git is available")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("❌ Git is required but not found")
+            if input("Install git? (y/n): ").lower() == 'y':
+                if not dep_manager.check_system_tool('git', 'git', auto_install=True):
+                    print("Failed to install git. Please install manually.")
+                    return False
+            else:
+                return False
+        
+        # Check for build tools
+        print("Checking build dependencies...")
+        build_tools = ['cmake', 'ninja', 'clang']
+        missing_tools = []
+        
+        for tool in build_tools:
+            try:
+                subprocess.run([tool, '--version'], capture_output=True, check=True)
+                print(f"✓ {tool} is available")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                missing_tools.append(tool)
+        
+        if missing_tools:
+            print(f"⚠️ Missing build tools: {', '.join(missing_tools)}")
+            print("These tools are required to build LSFG-VK from source.")
+            print("Please install them using your package manager:")
+            
+            pm = dep_manager.detect_package_manager()
+            if pm == 'pacman':
+                print("sudo pacman -S cmake ninja clang")
+            elif pm == 'apt':
+                print("sudo apt install cmake ninja-build clang")
+            elif pm == 'dnf':
+                print("sudo dnf install cmake ninja-build clang")
+            
+            if input("Continue anyway? (y/n): ").lower() != 'y':
+                return False
+        
+        # Ask installation method
+        print()
+        print("Installation Options:")
+        print("1. Quick install script (Arch-based distros)")
+        print("2. Manual build from source (All distros)")
+        print("3. Cancel")
+        
+        choice = input("Select installation method (1-3): ").strip()
+        
+        if choice == "1":
+            return self._install_lsfg_vk_quick()
+        elif choice == "2":
+            return self._install_lsfg_vk_manual()
+        else:
+            print("Installation cancelled")
+            return False
+
+    def _install_lsfg_vk_quick(self) -> bool:
+        """Quick install using the official install script"""
+        print("\n📥 Using quick install script...")
+        print("This will download and run the official LSFG-VK install script")
+        print("Note: This script is designed for Arch Linux and derivatives")
+        
+        confirm = input("Continue with quick install? (y/n): ").lower()
+        if confirm != 'y':
+            return False
+        
+        try:
+            # Download and run the install script
+            install_command = 'curl -sSf https://pancake.gay/lsfg-vk.sh | sh'
+            print(f"\nRunning: {install_command}")
+            
+            result = subprocess.run(install_command, shell=True, text=True)
+            
+            if result.returncode == 0:
+                print("✅ LSFG-VK installed successfully!")
+                self._configure_lsfg_vk()
+                return True
+            else:
+                print("❌ Installation failed")
+                print("Try the manual installation method instead")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Installation error: {e}")
+            return False
+
+    def _install_lsfg_vk_manual(self) -> bool:
+        """Manual build and install from source"""
+        print("\n🔨 Manual build from source...")
+        
+        # Create build directory
+        build_dir = Path.home() / ".cache" / "lsfg-vk-build"
+        build_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            os.chdir(build_dir)
+            print(f"Working in: {build_dir}")
+            
+            # Clone repository
+            print("📥 Cloning LSFG-VK repository...")
+            if (build_dir / "lsfg-vk").exists():
+                print("Repository already exists, updating...")
+                os.chdir(build_dir / "lsfg-vk")
+                subprocess.run(['git', 'pull'], check=True)
+            else:
+                subprocess.run(['git', 'clone', '--depth', '1', 
+                              'https://github.com/PancakeTAS/lsfg-vk.git'], check=True)
+                os.chdir(build_dir / "lsfg-vk")
+            
+            print("✅ Repository cloned/updated")
+            
+            # Build
+            print("🔨 Building LSFG-VK...")
+            
+            # Create build directory if it doesn't exist
+            if not (Path.cwd() / "build").exists():
+                subprocess.run(['cmake', '-B', 'build', '-G', 'Ninja'], check=True)
+            
+            subprocess.run(['cmake', '--build', 'build'], check=True)
+            print("✅ Build completed")
+            
+            # Install
+            print("📦 Installing LSFG-VK...")
+            result = subprocess.run(['sudo', 'cmake', '--install', 'build'], 
+                                  capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print("✅ LSFG-VK installed successfully!")
+                self._configure_lsfg_vk()
+                return True
+            else:
+                print("❌ Installation failed:")
+                print(result.stderr)
+                return False
+                
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Build/install failed: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return False
+
+    def _configure_lsfg_vk(self):
+        """Configure LSFG-VK settings"""
+        print("\n⚙️ Configuring LSFG-VK...")
+        
+        # Create config directory
+        config_dir = Path.home() / ".config" / "lsfg-vk"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        config_file = config_dir / "conf.toml"
+        
+        # Ask for default frame generation level
+        print("\nFrame Generation Configuration:")
+        print("Select default frame generation multiplier:")
+        print("1. 1x (disabled)")
+        print("2. 2x (double framerate)")
+        print("3. 3x (triple framerate)")
+        print("4. 4x (quadruple framerate)")
+        
+        while True:
+            choice = input("Select multiplier (1-4): ").strip()
+            if choice in ['1', '2', '3', '4']:
+                multiplier = int(choice)
+                break
+            print("Invalid choice. Please enter 1, 2, 3, or 4.")
+        
+        # Ask about performance mode
+        performance_mode = input("Enable performance mode? (faster but lower quality) (y/n): ").lower() == 'y'
+        
+        # Create basic config
+        config_content = f"""# LSFG-VK Configuration
+# Generated by OptiScaler Manager
+
+[global]
+multiplier = {multiplier}
+performance_mode = {str(performance_mode).lower()}
+flow_scale = 1.0
+
+# Per-game configurations can be added here
+# [game."game_executable.exe"]
+# multiplier = 2
+"""
+        
+        with open(config_file, 'w') as f:
+            f.write(config_content)
+        
+        print(f"✅ Configuration saved to {config_file}")
+        print(f"Default multiplier: {multiplier}x")
+        print(f"Performance mode: {'enabled' if performance_mode else 'disabled'}")
+        print()
+        print("💡 Usage:")
+        print("Add 'ENABLE_LSFG=1 %command%' to a game's Steam launch options")
+        print("You can also configure per-game settings in the config file")
+        print()
+        print("🔧 Advanced configuration:")
+        print(f"Edit {config_file} to customize settings per game")
+        print("See the LSFG-VK wiki for more configuration options")
+
+    def get_lsfg_vk_launch_options(self, multiplier: int = 2, performance_mode: bool = False) -> Dict[str, Dict]:
+        """Get LSFG-VK launch options catalog"""
+        base_env = f"ENABLE_LSFG=1 LSFG_MULTIPLIER={multiplier}"
+        
+        # Add performance mode if requested
+        if performance_mode:
+            base_env += " LSFG_PERFORMANCE_MODE=1"
+        
+        catalog = {
+            f"lsfg_vk_{multiplier}x": {
+                "name": f"LSFG-VK {multiplier}x Frame Generation",
+                "description": f"Generate {multiplier}x frames using LSFG-VK",
+                "command": f'{base_env} %command%',
+                "category": "lsfg_vk",
+                "compatibility": "Vulkan games",
+                "requirements": "LSFG-VK installed, Lossless Scaling owned"
+            },
+            f"lsfg_vk_{multiplier}x_mangohud": {
+                "name": f"LSFG-VK {multiplier}x + MangoHUD",
+                "description": f"LSFG-VK {multiplier}x with performance monitoring",
+                "command": f'mangohud {base_env} %command%',
+                "category": "lsfg_vk", 
+                "compatibility": "Vulkan games",
+                "requirements": "LSFG-VK installed, MangoHUD, Lossless Scaling owned"
+            }
+        }
+        
+        return catalog
+
     def get_launch_options_catalog(self, rdna3_workaround: bool = False, include_mangohud: bool = True) -> Dict[str, Dict]:
         """Get a comprehensive catalog of launch options with categorization"""
         optiscaler_base = 'WINEDLLOVERRIDES="dxgi=n,b"'
@@ -1548,6 +1794,67 @@ OverrideNvapiDll=auto
                     }
             catalog.update(rdna3_options)
         
+        # Add LSFG-VK options
+        lsfg_vk_options = {}
+        for multiplier in [2, 3, 4]:
+            lsfg_vk_catalog = self.get_lsfg_vk_launch_options(multiplier)
+            lsfg_vk_options.update(lsfg_vk_catalog)
+        
+        # Add LSFG-VK with performance mode
+        for multiplier in [2, 3, 4]:
+            perf_catalog = self.get_lsfg_vk_launch_options(multiplier, performance_mode=True)
+            for key, option in perf_catalog.items():
+                option["name"] += " (Performance Mode)"
+                option["description"] += " with performance mode enabled"
+                lsfg_vk_options[f"{key}_perf"] = option
+        
+        catalog.update(lsfg_vk_options)
+        
+        # Add combined OptiScaler + LSFG-VK options
+        combined_options = {}
+        
+        # Basic OptiScaler + LSFG-VK combinations
+        for multiplier in [2, 3, 4]:
+            combined_options[f"optiscaler_lsfg_{multiplier}x"] = {
+                "name": f"OptiScaler + LSFG-VK {multiplier}x",
+                "description": f"OptiScaler FSR4 upscaling with LSFG-VK {multiplier}x frame generation",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 ENABLE_LSFG=1 LSFG_MULTIPLIER={multiplier} %command%',
+                "category": "combined",
+                "compatibility": "Experimental - may cause conflicts",
+                "requirements": "OptiScaler installed, LSFG-VK installed, Lossless Scaling owned"
+            }
+            
+            combined_options[f"optiscaler_lsfg_{multiplier}x_mangohud"] = {
+                "name": f"OptiScaler + LSFG-VK {multiplier}x + MangoHUD",
+                "description": f"OptiScaler FSR4 + LSFG-VK {multiplier}x with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 ENABLE_LSFG=1 LSFG_MULTIPLIER={multiplier} %command%',
+                "category": "combined",
+                "compatibility": "Experimental - may cause conflicts",
+                "requirements": "OptiScaler installed, LSFG-VK installed, MangoHUD, Lossless Scaling owned"
+            }
+        
+        # Advanced OptiScaler + LSFG-VK combinations
+        for multiplier in [2, 3, 4]:
+            combined_options[f"advanced_optiscaler_lsfg_{multiplier}x"] = {
+                "name": f"Advanced OptiScaler + LSFG-VK {multiplier}x",
+                "description": f"Advanced OptiScaler settings with LSFG-VK {multiplier}x frame generation",
+                "command": f'{optiscaler_base} PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 ENABLE_LSFG=1 LSFG_MULTIPLIER={multiplier} %command%',
+                "category": "combined",
+                "compatibility": "Experimental - may cause conflicts",
+                "requirements": "OptiScaler installed, LSFG-VK installed, DXVK, Lossless Scaling owned"
+            }
+            
+            combined_options[f"advanced_optiscaler_lsfg_{multiplier}x_mangohud"] = {
+                "name": f"Advanced OptiScaler + LSFG-VK {multiplier}x + MangoHUD",
+                "description": f"Advanced OptiScaler + LSFG-VK {multiplier}x with performance monitoring",
+                "command": f'mangohud {optiscaler_base} PROTON_FSR4_UPGRADE=1 DXVK_ASYNC=1 PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 VKD3D_CONFIG=dxr11,dxr WINE_CPU_TOPOLOGY=4:2 ENABLE_LSFG=1 LSFG_MULTIPLIER={multiplier} %command%',
+                "category": "combined",
+                "compatibility": "Experimental - may cause conflicts",
+                "requirements": "OptiScaler installed, LSFG-VK installed, DXVK, MangoHUD, Lossless Scaling owned"
+            }
+        
+        catalog.update(combined_options)
+        
         # Filter out MangoHUD options if not requested
         if not include_mangohud:
             catalog = {k: v for k, v in catalog.items() if "mangohud" not in k}
@@ -1583,6 +1890,8 @@ OverrideNvapiDll=auto
             categories = {
                 "basic": "Basic Setup",
                 "advanced": "Advanced Options", 
+                "lsfg_vk": "LSFG-VK Frame Generation",
+                "combined": "OptiScaler + LSFG-VK Combined",
                 "debug": "Debugging",
                 "experimental": "Experimental",
                 "fsr4": "FSR4 Specific",
@@ -1627,13 +1936,15 @@ OverrideNvapiDll=auto
             choice_index = 1
             index_map = {}
             
-            for cat_key in ["basic", "advanced", "fsr4", "game_specific", "compatibility", "experimental", "debug"]:
+            for cat_key in ["basic", "advanced", "lsfg_vk", "combined", "fsr4", "game_specific", "compatibility", "experimental", "debug"]:
                 if cat_key not in categories:
                     continue
                     
                 cat_name = {
                     "basic": "Basic Setup",
                     "advanced": "Advanced Options",
+                    "lsfg_vk": "LSFG-VK Frame Generation",
+                    "combined": "OptiScaler + LSFG-VK Combined",
                     "fsr4": "FSR4 Specific", 
                     "game_specific": "Game-Specific",
                     "compatibility": "Compatibility",
@@ -2086,10 +2397,11 @@ def main():
     while True:
         print("\n=== OptiScaler Manager ===")
         print("1. Install OptiScaler")
-        print("2. Manage installed games")
-        print("3. Exit")
+        print("2. Install LSFG-VK (Lossless Scaling Frame Generation)")
+        print("3. Manage installed games")
+        print("4. Exit")
         
-        choice = input("\nEnter choice (1-3): ").strip()
+        choice = input("\nEnter choice (1-4): ").strip()
         
         if choice == "1":
             # Streamlined install process
@@ -2179,6 +2491,11 @@ def main():
                 print("Invalid selection")
         
         elif choice == "2":
+            # Install LSFG-VK
+            print("\n=== Install LSFG-VK ===")
+            manager.install_lsfg_vk()
+            
+        elif choice == "3":
             # Manage installed games
             print("\n=== Manage Installed Games ===")
             installs = manager.load_installations()
@@ -2253,11 +2570,11 @@ def main():
             elif action == "3":
                 continue
         
-        elif choice == "3":
+        elif choice == "4":
             break
         
         else:
-            print("Invalid choice. Please enter 1, 2, or 3.")
+            print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
 if __name__ == "__main__":
     main()
