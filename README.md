@@ -46,7 +46,7 @@ A streamlined Python-based tool for automatically managing OptiScaler installati
 ## Installation
 
 ### Prerequisites
-- **Linux Distribution**: Arch Linux, Bazzite, or compatible
+- **Linux Distribution**: Arch Linux, Cachyos, or compatible
 - **Steam**: Installed and configured
 - **Python 3**: With requests module
 - **p7zip**: For archive extraction
