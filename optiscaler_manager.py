@@ -979,7 +979,7 @@ class OptiScalerManager:
             releases = response.json()
             
             for release in releases:
-                if release.get("prerelease", False) or release.get("tag_name") == "nightly":
+                if release.get("latest", False) or release.get("tag_name") == "latest":
                     for asset in release["assets"]:
                         if asset["name"].endswith((".zip", ".7z")):
                             download_url = asset["browser_download_url"]
